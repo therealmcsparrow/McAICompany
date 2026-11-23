@@ -296,16 +296,10 @@ export function answer(text, root = process.cwd()) {
       if (open.length === 1 && sameQuestions(open[0].questions, p.tool_input.questions)) (st === 'ended' ? ended : live).push({ file, form: open[0], slug, view });
     } catch { /* a broken run is skipped */ }
   }
-  // Live runs win and an ambiguous live run stops the search. Otherwise only an ended run's form opened at or after its end is
-  // eligible, and the newest (`at`, then slug) takes the answer.
-  let hit = null;
-  if (liveAmbiguous || live.length) {
-    if (live.length === 1 && !liveAmbiguous) hit = live[0];
-  } else if (!endedAmbiguous) {
-    for (const h of ended.filter((e) => eligible(e.form, e.view))) {
-      if (!hit || ranksAbove({ at: h.form.at, slug: h.slug }, { at: hit.form.at, slug: hit.slug })) hit = h;
-    }
-  }
+  // Fail closed: records only when exactly one run holds a form that can take the answer (a live run's open form, or an ended
+  // run's form opened at or after its end). Eligible matches in more than one run, or an ambiguous live run, record nothing.
+  const cands = [...live, ...ended.filter((e) => eligible(e.form, e.view))];
+  const hit = !liveAmbiguous && !(endedAmbiguous && !live.length) && cands.length === 1 ? cands[0] : null;
   if (!hit) return;
   const answers = mapAnswers(hit.form.questions, p.tool_response.answers);
   if (!answers) return;
