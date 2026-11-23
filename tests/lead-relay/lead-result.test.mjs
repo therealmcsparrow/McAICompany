@@ -190,7 +190,7 @@ test('result refuses a traversal or odd slug and a symlinked run folder gets not
   assert.equal(fs.existsSync(path.join(real, 'lead-result.txt')), false);
 });
 
-test('open and again refuse an ended run', () => {
+test('open on an ended run is accepted (the answer hook records it, ended-run scope)', () => {
   reset();
   const ended = `${ID}/05-ended`;
   mkRun(ended);
@@ -198,9 +198,8 @@ test('open and again refuse an ended run', () => {
   const q = path.join(root, 'q.json');
   fs.writeFileSync(q, JSON.stringify([{ q: 'Go?', header: 'Go', multi: false, options: [{ label: 'Yes', description: 'y' }, { label: 'No', description: 'n' }] }]));
   const r = main(['open', ended, 'ask', 'q.json'], root);
-  assert.equal(r.code, 1);
-  assert.match(r.out, /refused: run ended/);
-  assert.equal(fs.existsSync(path.join(dirOf(ended), 'forms.jsonl')), false);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(fs.existsSync(path.join(dirOf(ended), 'forms.jsonl')), true);
 });
 
 // ---- shield: a Role cannot write lead-result.txt, nor run the record functions from a shell ----------------------------

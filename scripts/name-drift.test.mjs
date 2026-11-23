@@ -548,7 +548,9 @@ test('the scan is bounded: a big file that would be scanned is a hit, a big file
 
 // ---- the real repository ----
 
-const NO_COMPANY = !existsSync(COMPANY) && '.company is absent (CI)';
+// Absent (CI) or without scannable files (a fresh git worktree: .company is untracked, its run folder holds no .md yet) leaves nothing to scan.
+const NO_COMPANY = (!existsSync(COMPANY) && '.company is absent (CI)')
+  || (listTree(COMPANY, SKIP_DIRS).files.length === 0 && '.company holds no scannable file (worktree)');
 
 test('dispatch blocks of skills, agents and the dispatch-prompt Contract hold no Name: line and no name', () => {
   const r = scanDispatchFiles(dispatchFiles(ROOT));

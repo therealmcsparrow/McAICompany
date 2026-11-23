@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// contract: docs/contracts/lead-handoff.md v3.0
+// contract: docs/contracts/lead-handoff.md v3.1
 // uses: docs/contracts/run-state.md v3.0 docs/contracts/idea-flow.md v2.0 docs/contracts/tier-sets.md v1.2
 // Lead hand-over: a PreCompact hook that writes a Lead Handoff at a clean point, a Stop hook that keeps main's context
 // reading, a SubagentStop hook that keeps each Lead agent's peak, a SessionStart hook that resets the current reading for a
@@ -16,7 +16,8 @@ import { runCap, CONTEXT_CAP_DEFAULT, handoverOf } from './run-cap.mjs';
 import { main as flow } from './idea-flow.mjs';
 import { readTierPath } from './tier-set.mjs';
 import { readInside } from './handoff-lint.mjs';
-import { isRunSlug, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { isRunSlug, isProjectId, parseRun, workParts, exactWorkPath, WorkFolderRefusal } from '../mods/lib/work-folder.mjs';
+import { worktreeMain } from '../hooks/lib/worktree-main.mjs';
 
 // Defaults only; the active run's values come from runCap.
 export const CAP = CONTEXT_CAP_DEFAULT;
@@ -731,6 +732,39 @@ function checkSlug(s, root) {
   }
 }
 
+// lead-handoff v3.1: `read` and `ctx` take a bare <ProjectID> or a flat <NN>-<playbook> and resolve it to one full run slug.
+// Unique match only; every other argument goes on unchanged. A legacy folder of the flat name keeps the v3.0 path.
+const FLAT_RUN = /^(0[1-9]|[1-9]\d|[1-9]\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+function resolveSlug(root, s) {
+  let match;
+  if (isProjectId(s)) match = (x) => parseRun(x)?.id === s;
+  else if (typeof s === 'string' && FLAT_RUN.test(s) && !legacyEntry(root, s)) match = (x) => x.slice(x.indexOf('/') + 1) === s;
+  else return s;
+  let slugs;
+  try { slugs = runSlugs(root, { max: MAX_SCAN }).slugs; } catch { slugs = []; }
+  const found = slugs.filter((x) => x.includes('/') && parseRun(x) !== null && match(x) && runExists(root, x));
+  if (found.length === 0) refuse('no run');
+  if (found.length === 1) return found[0];
+  const rest = found.length - 5;
+  return refuse('ambiguous slug: ' + found.slice(0, 5).join(' ') + (rest > 0 ? ' +' + rest : ''));
+}
+
+// An entry named `name` directly in .company/work. exactWorkPath decides the letter case; a wrong-case entry
+// counts as present so the name stays unresolved and checkSlug refuses it.
+function legacyEntry(root, name) {
+  try { return exactWorkPath({ fs, path }, root, [name]) === 'exact'; } catch (e) {
+    if (e instanceof WorkFolderRefusal) return true;
+    throw e;
+  }
+}
+
+// CLI root: the main tree of the linked worktree holding cwd when it has a real .company/work folder, else cwd.
+function cliRoot(cwd = process.cwd()) {
+  const m = worktreeMain(cwd);
+  const l = m === null ? null : lstatOrNull(path.join(m, '.company', 'work'));
+  return l !== null && l.isDirectory() && !l.isSymbolicLink() ? m : cwd;
+}
+
 function stateLines(st) {
   return [`gate: ${st.gate}`, `form: ${st.form}`, `step: ${st.step}`, `running: ${st.running ? 'step' : 'none'}`];
 }
@@ -780,11 +814,12 @@ function relayFormLine(dir) {
 
 function exec(argv, root, env) {
   for (const a of argv) if (typeof a !== 'string' || a.length > MAX_ARG || BAD_CHAR.test(a)) refuse('argument is not accepted');
-  const [cmd, slug, ...rest] = argv;
+  let [cmd, slug, ...rest] = argv;
   const now = Date.now();
   switch (cmd) {
     case 'write': case 'read': {
       if (rest.length !== 0) refuse('usage');
+      if (cmd === 'read') slug = resolveSlug(root, slug);
       checkSlug(slug, root);
       const dir = runExists(root, slug);
       if (!dir) refuse('no run');
@@ -801,6 +836,7 @@ function exec(argv, root, env) {
     }
     case 'ctx': {
       if (rest.length !== 1 || rest[0] !== '--json') refuse('usage');
+      slug = resolveSlug(root, slug);
       checkSlug(slug, root);
       const dir = workDir(root, slug);
       if (!dir) refuse('no run');
@@ -834,7 +870,7 @@ function exec(argv, root, env) {
   }
 }
 
-export function main(argv, root = process.cwd(), env = process.env) {
+export function main(argv, root = cliRoot(), env = process.env) {
   try {
     return { code: 0, out: exec(argv, root, env) };
   } catch (e) {

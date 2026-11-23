@@ -191,23 +191,16 @@ test('a traversal or malformed slug is refused by result', async () => {
   assert.match(unknown.stdout + unknown.stderr, /refused: no run/);
 });
 
-test('open and again on an ended run are refused with `refused: run ended`', async () => {
+test('open and again on an ended run are accepted for a form opened at or after the end', async () => {
   const t = await setup();
   const q = path.join(t.fx.env.project, 'qa-q.json');
   fs.writeFileSync(q, JSON.stringify([{ q: 'Go on?', header: 'Ask', multi: false, options: [{ label: 'Yes', description: 'Go' }, { label: 'No', description: 'Stop' }] }]));
+  t.endRun(t.slug);
   const o = t.cli('open', t.slug, 'ask', 'qa-q.json');
   assert.equal(o.status, 0, o.stdout + o.stderr);
-  t.endRun(t.slug);
-  const forms = path.join(t.dir, 'forms.jsonl');
-  const before = fs.readFileSync(forms, 'utf8');
   const again = t.cli('again', t.slug, 'f01');
-  assert.equal(again.status, 1);
-  assert.match(again.stdout + again.stderr, /refused: run ended/);
-  assert.doesNotMatch(again.stdout, /STATUS: needs-ceo/);
-  const open2 = t.cli('open', t.slug, 'ask', 'qa-q.json');
-  assert.equal(open2.status, 1);
-  assert.match(open2.stdout + open2.stderr, /refused: run ended/);
-  assert.equal(fs.readFileSync(forms, 'utf8'), before, 'nothing written on refusal');
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.match(again.stdout, /STATUS: needs-ceo/);
 });
 
 test('a stale live-set entry is reset when main spawns a Lead, so the next Lead is recorded', async () => {

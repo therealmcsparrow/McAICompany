@@ -1,5 +1,5 @@
 // Bug P20261119.000001 (c): `again` for a form of an ended run prints the needs-ceo block, so main asks the CEO in vain
-// (answer hook skips ended runs). Expected: refused: run ended. Module: scripts/lead-relay.mjs (cmdAgain).
+// (answer records only a form opened at or after the end). Expected: refused: form opened before the run ended. Module: scripts/lead-relay.mjs (cmdAgain).
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -32,8 +32,11 @@ test('again refuses an open form of an ended run and says the run ended', () => 
   const end = spawnSync(process.execPath, [path.join(here, '..', '..', 'scripts', 'run-state.mjs'), 'end', SLUG, 'ship'], { cwd: root, env, encoding: 'utf8' });
   const st = spawnSync(process.execPath, [path.join(here, '..', '..', 'scripts', 'run-state.mjs'), 'show', SLUG, '--json'], { cwd: root, env, encoding: 'utf8' });
   assert.match(st.stdout + end.stdout + end.stderr, /"state":"ended"|ended/, `precondition: run ended\n${end.stdout}${end.stderr}${st.stdout}`);
+  // The form was opened before the end: backdate it so the second-resolution clock cannot make it eligible.
+  const forms = path.join(dir, 'forms.jsonl');
+  fs.writeFileSync(forms, fs.readFileSync(forms, 'utf8').replace(/"at":"[^"]+"/, '"at":"2020-01-01T00:00:00Z"'));
   const a = run(['again', SLUG, 'f01']);
   assert.equal(a.status, 1, `expected refusal, got: ${a.stdout}`);
-  assert.match(a.stdout + a.stderr, /refused: run ended/);
+  assert.match(a.stdout + a.stderr, /refused: form opened before the run ended/);
   assert.doesNotMatch(a.stdout, /STATUS: needs-ceo/);
 });
