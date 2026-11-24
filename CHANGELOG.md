@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-11-24
+
+Rollback: node scripts/stable.mjs 0.45.0
+
+### Fixed
+- **Roles never wait on a background command notice.** A Role that started a command in the background could stall on a notice that never came. The handoff rule now tells Roles to poll for the result instead, and it covers long commands too. Regression tests cover both and run in `npm test` (PR #94, PR #95).
+
 ## [0.45.0] - 2026-11-23
 
 Rollback: node scripts/stable.mjs 0.44.3
