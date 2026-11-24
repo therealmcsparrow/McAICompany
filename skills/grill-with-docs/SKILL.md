@@ -1,6 +1,6 @@
 ---
 name: grill-with-docs
-description: Playbook. The CEO gives an idea or a file and the Lead interviews them, one question at a time, until every branch is closed. The repo docs (docs/, GLOSSARY.md, docs/adr/) are searched first and each branch they close cites a doc; Proposals carry GLOSSARY and ADR lines. Builds nothing; ends with a pick of what to run next.
+description: Playbook. The CEO gives an idea or a file and the Lead interviews them, one question at a time, until every branch is closed. The repo docs (docs/, GLOSSARY.md, docs/adr/) are searched first and each branch they close cites a doc; Proposals carry GLOSSARY and ADR lines. Builds nothing; ends with a pick of what to run next. Use when the decision should be checked against the repo docs and ADRs.
 disable-model-invocation: true
 argument-hint: <idea | file> | resume <name>
 ---

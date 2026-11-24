@@ -1,6 +1,6 @@
 ---
 name: grill
-description: Playbook. The CEO gives an idea or a file and the Lead interviews them, one question at a time, until every branch of the decision tree is closed. Facts the repo or the web can answer are looked up, the rest is asked. Each answer is logged to grill.md before the next question. Builds nothing; ends with a pick of what to run next.
+description: Playbook. The CEO gives an idea or a file and the Lead interviews them, one question at a time, until every branch of the decision tree is closed. Facts the repo or the web can answer are looked up, the rest is asked. Each answer is logged to grill.md before the next question. Builds nothing; ends with a pick of what to run next. Use when the CEO wants an idea or plan stress-tested before deciding.
 disable-model-invocation: true
 argument-hint: <idea | file> | resume <name>
 ---

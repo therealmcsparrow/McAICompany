@@ -1,6 +1,6 @@
 ---
 name: version
-description: Show which version of the aico plugin is installed, with its latest changelog entry.
+description: Show which version of the aico plugin is installed, with its latest changelog entry. Use when the CEO wants to know which aico version is installed.
 disable-model-invocation: true
 argument-hint: (no arguments)
 ---

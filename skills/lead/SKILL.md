@@ -72,3 +72,5 @@ Anything that changes code ends with code-reviewer ∥ qa ∥ security (parallel
 Show the CEO the route (numbered Steps, ∥ for parallel, Gates marked) plus your one-line reading of the goal, then ask in a form (Approve / Change / Stop; `aico:pipeline`). This is the Brief Gate only when the route has no product-manager Step; otherwise the Brief Gate comes after the brief. Then run the route via `aico:pipeline`.
 
 Main session: `references/main-loop.md` (spawn the Lead, relay forms; load only when you are main).
+
+Project profile template: `references/project-template.md` (copied by `aico:pipeline` Setup when `.company/project.md` is missing; not read as instructions).

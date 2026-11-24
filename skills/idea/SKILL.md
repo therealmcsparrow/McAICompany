@@ -1,6 +1,6 @@
 ---
 name: idea
-description: "Playbook. The CEO types a rough idea and the Lead guides it from there. It is captured, you pick a grill (grill, grill-me or grill-with-docs), the idea is refined, then you choose a route: water cooler, brainstorm, research, or spec and tickets. Tickets are approved one by one, then built (software company only), parked on the roadmap, or the idea is parked."
+description: "Playbook. The CEO types a rough idea and the Lead guides it from there. It is captured, you pick a grill (grill, grill-me or grill-with-docs), the idea is refined, then you choose a route: water cooler, brainstorm, research, or spec and tickets. Tickets are approved one by one, then built (software company only), parked on the roadmap, or the idea is parked. Use when the CEO has a rough idea that still needs shaping before any build."
 disable-model-invocation: true
 argument-hint: <idea> | resume <slug>
 ---

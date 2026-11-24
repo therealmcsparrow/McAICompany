@@ -1,6 +1,6 @@
 ---
 name: to-spec
-description: Playbook. Turn an idea, a grill file or a brief into a spec draft the CEO can read, then build from it later. The Product Manager writes the brief and the draft, spec-check judges it, nothing is built or committed.
+description: Playbook. Turn an idea, a grill file or a brief into a spec draft the CEO can read, then build from it later. The Product Manager writes the brief and the draft, spec-check judges it, nothing is built or committed. Use when an idea or brief needs a readable spec before planning.
 disable-model-invocation: true
 argument-hint: <idea | file>
 ---
