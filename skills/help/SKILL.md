@@ -1,6 +1,6 @@
 ---
 name: help
-description: Explain the aico commands. No argument lists them all; with a command name, shows its options and what it does.
+description: Explain the aico commands. No argument lists them all; with a command name, shows its options and what it does. Use when the CEO wants to know which aico commands exist or how one works.
 disable-model-invocation: true
 argument-hint: "[command]"
 ---

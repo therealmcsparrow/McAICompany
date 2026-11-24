@@ -1,6 +1,6 @@
 ---
 name: bug
-description: "Playbook. The CEO types a bug report and the Lead guides it from there. It is captured, you pick a grill (grill, grill-me or grill-with-docs), the report is refined, then you choose a route: water cooler, brainstorm, research, or spec and tickets. Tickets are approved one by one, then fixed through aico:fix, parked on the roadmap, or the report is parked."
+description: "Playbook. The CEO types a bug report and the Lead guides it from there. It is captured, you pick a grill (grill, grill-me or grill-with-docs), the report is refined, then you choose a route: water cooler, brainstorm, research, or spec and tickets. Tickets are approved one by one, then fixed through aico:fix, parked on the roadmap, or the report is parked. Use when the CEO has a bug report that still needs shaping before a fix."
 disable-model-invocation: true
 argument-hint: <bug report> | resume <slug>
 ---

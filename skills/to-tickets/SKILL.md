@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: Playbook. Turn a spec or a brief into a plan of tasks (plan.md) with a dependency graph, before anything is built. The Architect writes the plan, the handover check judges it; no builder, branch or commit.
+description: Playbook. Turn a spec or a brief into a plan of tasks (plan.md) with a dependency graph, before anything is built. The Architect writes the plan, the handover check judges it; no builder, branch or commit. Use when a spec or brief needs a task plan before building.
 disable-model-invocation: true
 argument-hint: <spec or brief file>
 ---
