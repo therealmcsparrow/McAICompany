@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.45.2] - 2026-11-24
+
+Rollback: node scripts/stable.mjs 0.45.1
+
 ### Changed
 - **Gate result words have one source.** `lead-relay open` now takes the allowed Gate option results from `run-state`, so the two lists can no longer drift apart (PR #98).
 - **CEO-only command descriptions say when to use them.** The 10 CEO-only commands (bug, grill, grill-me, grill-with-docs, help, idea, pentest, to-spec, to-tickets, version) now carry a "Use when" sentence in the / menu, and the lead skill links its project template (PR #97).
