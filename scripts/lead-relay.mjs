@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { main as handover, workDir, openRegular, readSmall, lstatOrNull, iso } from './lead-handover.mjs';
-import { runSlugs, show, MAX_FORMS } from './run-state.mjs';
+import { runSlugs, show, MAX_FORMS, RESULTS } from './run-state.mjs';
 import { isRunSlug, exactWorkPath } from '../mods/lib/work-folder.mjs';
 
 const FORMS = 'forms.jsonl';
@@ -28,7 +28,7 @@ const SELF_EXIT_MS = 1000;
 const NOFOLLOW = fs.constants.O_NOFOLLOW ?? 0;
 const BAD_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const ID_RE = /^f(0[1-9]|[1-9]\d)$/;
-const GATE_RESULTS = ['passed', 'changed', 'stopped']; // the words `run-state gate` accepts
+const GATE_RESULTS = [...RESULTS]; // one source: the words `run-state gate` accepts
 const KIND_RE = /^(gate:(brief|plan|ship)|idea|ask|step:[a-z][a-z0-9-]{0,30})$/;
 const DENY = 'aico: AskUserQuestion with preset answers is refused';
 
