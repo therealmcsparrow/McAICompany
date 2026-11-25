@@ -34,7 +34,7 @@ Everything the company produces for a given job lands under `.company/` in your 
 
 ### Version
 
-**Current: 0.45.2** (36 Role agents).
+**Current: 0.45.3** (36 Role agents).
 
 Update an installed copy with:
 
