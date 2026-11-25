@@ -219,8 +219,7 @@ test('AC5: early returns and the other commands print nothing on stderr', async 
     ['list', makeRepo({ checks: twoChecks() }), 'list'],
     ['drift', makeRepo({ checks: twoChecks() }), 'drift'],
     ['slices', makeRepo({ checks: twoChecks() }), 'slices'],
-    ['text', makeRepo({ checks: twoChecks() }), 'text'],
-    ['fill-security', makeRepo({ checks: twoChecks() }), 'fill-security']
+    ['text', makeRepo({ checks: twoChecks() }), 'text']
   ];
   for (const [name, r, command] of cases) {
     const res = await runCli(r, runArgs(r, command), HEARTBEAT);

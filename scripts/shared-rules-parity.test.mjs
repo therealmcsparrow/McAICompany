@@ -40,6 +40,9 @@ function parity(script, args, cwd = tmp) {
   // rule-check v1.7 (plan C15) added the `standing` command, so its usage text gains one line; drop it before comparing.
   const planned = t => t.replace(/^ {2}standing --write \| standing check\r?\n/m, '');
   if (script === 'rule-check.mjs') Object.assign(b, { stdout: planned(b.stdout), stderr: planned(b.stderr) });
+  // rule-check v2.0 removed `fill-security`, so the base tree's usage text loses that line before comparing.
+  const dropped = t => t.replace(/^ {2}fill-security <standards\.md> --packs <dir>\r?\n/m, '');
+  if (script === 'rule-check.mjs') Object.assign(a, { stdout: dropped(a.stdout), stderr: dropped(a.stderr) });
   assert.deepEqual(b, a, `${script} ${args.join(' ')}`);
   return a;
 }

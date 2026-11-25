@@ -32,7 +32,7 @@ Every product follows sourced rules for its tools. **Security is law.** A Fix ro
 ## Slices and tool checks
 Each `## Rules per task` row is a builder's slice and lists every security Must (IDs with `-SEC`, every rule in a pack's `## Security`); `rule-check.mjs slices <handoff>` exits 1 on a gap. A Project rule may end `— check: <tool>` (or `check: judgment`), bound in `.company/checks.json` (`docs/contracts/rule-check.md`); `rule-check.mjs drift` fails when binding and rule part ways, and a rule rewrite keeps its tag.
 
-A Ruleset may lack a loaded pack's `-SEC` Must rows (an ID in `## Debt` or `## Exceptions` does not count). The Senior Engineer Step runs `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" rule-check fill-security .company/standards.md --packs .company/standards`: it appends the missing rows under `## Security rows (filled by rule-check)` and prints `added <id>`. Those rows are unsigned until the Architect signs them off; list them in the Handoff. Details: `docs/contracts/rule-check.md`.
+A committed pack's security Musts are in force as they stand: never copy them into the Ruleset. `slices` reads them from the packs. An old `## Security rows (filled by rule-check)` section is ignored and may be deleted.
 
 ## Self-check, exceptions, debt
 - **Builders, before `done`:** `## Standards`: each mapped Must ID → `complied` or `exception requested`.
