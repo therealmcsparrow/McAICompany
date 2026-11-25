@@ -11,8 +11,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const MAX_INPUT = 4 * 1024 * 1024;
-const SELF_EXIT_MS = 8500; // under the 10 s hook timeout; a CPU-loaded start must not deny a spawn at 3.8 s
-const START_EXIT_MS = 9500;
+const SELF_EXIT_MS = 25000; // under the 30 s hook timeout (hooks.json); another session's test workers can starve a node start past 10 s, so a loaded machine must not block calls
+const START_EXIT_MS = 28000;
 const MAX_TOTAL_FIXTURES = 400;
 const MAX_FIXTURE_DETAILS = 5;
 const MAX_FIXTURES = 24;
@@ -122,7 +122,7 @@ async function main() {
   try { peek = JSON.parse(text); } catch { /* malformed below */ }
   const name = isObj(peek) && typeof peek.hook_event_name === 'string' ? peek.hook_event_name : null;
   const peekLead = isObj(peek) && (name !== 'PreToolUse' || !Object.hasOwn(peek, 'agent_id')) && name !== 'SubagentStop';
-  // The session start replay is bounded by its fixture count, so it gets its own, longer self-exit (the hook timeout is 10 s).
+  // The session start replay is bounded by its fixture count, so it gets its own, longer self-exit (the hook timeout is 30 s).
   if (name === 'SessionStart') { clearTimeout(exitTimer); setTimeout(() => finish(null), START_EXIT_MS).unref(); }
   const guardsOff = process.env.AICO_GUARDS === 'off';
 

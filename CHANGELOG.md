@@ -4,6 +4,9 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Fixed
+- Guard hook no longer blocks tool calls on a busy machine. The hook-host timeout rises from 10 s to 30 s (self-exit 25 s, SessionStart 28 s). Another session's test workers starved node starts past 10 s, and with `onFailure: "block"` every tool call failed with `hook ... timed out`. A normal call still takes about 0.4 s.
+
 ## [0.46.0] - 2026-11-25
 
 Rollback: node scripts/stable.mjs 0.45.3
