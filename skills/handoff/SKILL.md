@@ -47,6 +47,11 @@ risk-tier: medium
 acceptance-ids: [AC1, AC3]
 files-touched: [src/x.ts]
 contracts: [handoff]
+# optional keys, omit when empty:
+# tests: <scope> pass <p> fail <f>
+# closes: [R-2]
+# open: []
+# next-step: <role id> — <goal>   (or none)
 ---
 By: <role id>
 ## Did
@@ -69,6 +74,9 @@ By: <role id>
 - Only when `aico:ruleset` asks: `## Standards` (builders: Must IDs complied or exception requested) and `## Debt` (old violations), before `## Next`.
 - Don't duplicate content held in other artifacts (specs, plans, ADRs, issues, commits, diffs); reference it by path or URL.
 - Redact sensitive information such as API keys, passwords or personal data.
+- `tests:`, `closes:`, `open:` and `next-step:` are optional (`handoff` contract part 6). `next-step:` is the Role and Goal for the next Step; it must agree with the first `## Next` bullet. `## Next` may be `- see next-step:` when the key says everything.
+- `## Did` never repeats a path list already in `files-touched`; it says what changed and why, and cites a path only to pin a specific line or change.
+- Did and Decisions hold no process boilerplate ("committed by the Lead", "lint passes", "ran the handoff lint", "no commit made"). A test run goes in `tests:`, not as a Did bullet.
 - Under ~60 lines; link to files, don't paste code. Your final reply to the Lead is one line: `<status> — <output path>`.
 
 ## Language
