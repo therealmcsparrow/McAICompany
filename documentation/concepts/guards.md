@@ -24,7 +24,7 @@ The `model-floor` guard is removed. The model floor itself stays: the Lead appli
 
 `self-protect` is frozen as it is. A way around it is filed as Debt, not as a blocking finding.
 
-Shell commands are checked only for `.env` and for writes to run records (ADR 0079). Any other shell command passes. A command with a target the guard cannot resolve passes too, unless it also names a run-record path. A command over 200000 characters is refused.
+Shell commands are checked only for `.env` and for writes to run records (ADR 0079). Any other shell command passes. A command with a target the guard cannot resolve passes too, unless it also names a run-record path. A command over 200000 characters is refused. The shell never glob-expands a heredoc body, so the `.env` guard checks a body for literal `.env` names only, not for globs such as `.*`.
 
 Each guard is a pair of words: the guard name and a rule ID, so a ruleset can name it.
 

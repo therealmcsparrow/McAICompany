@@ -183,6 +183,14 @@ function lastSegment(records) {
 
 const segmentOpen = seg => seg.length > 0 && !seg.some(r => r.ev === 'end');
 
+// Last activity of a segment (ms). A `sub` row of a non-aico agent (role `other`) is not run activity:
+// any subagent of any session stops through the hook, so counting it kept a dead run active forever.
+function segmentActivity(seg) {
+  let at = Date.parse(seg[0].at);
+  for (const r of seg) if (!(r.ev === 'sub' && r.role === 'other')) at = Math.max(at, Date.parse(r.at));
+  return at;
+}
+
 // A frontmatter key read as an enum: any value outside the set is null.
 function fmEnum(fmText, key, allowed) {
   for (const line of fmText.split(String.fromCharCode(10))) {
@@ -261,7 +269,7 @@ function load(root, slug, now) {
   const seg = rec.unreadable ? [] : lastSegment(rec.records);
   let activity = 0;
   if (seg.length > 0) {
-    activity = Math.max(Date.parse(seg[seg.length - 1].at), newestStep);
+    activity = Math.max(segmentActivity(seg), newestStep);
     view.started = seg[0].at;
     // Latest ask per Gate since that Gate's previous entry (or the segment start).
     const asked = new Map();
@@ -394,7 +402,7 @@ function runActivity(root, parts, now) {
   if (rec.unreadable) return 0;
   const seg = lastSegment(rec.records);
   if (!segmentOpen(seg)) return 0;
-  const activity = Math.max(Date.parse(seg[seg.length - 1].at), newestStep);
+  const activity = Math.max(segmentActivity(seg), newestStep);
   return now - activity > STALE_MS ? 0 : activity;
 }
 
