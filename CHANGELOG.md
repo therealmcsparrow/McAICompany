@@ -4,6 +4,17 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.45.3] - 2026-11-25
+
+Rollback: node scripts/stable.mjs 0.45.2
+
+### Fixed
+- **A dead run no longer stays active forever.** Every subagent that stopped, from any session, added a row to the open run and reset its 12-hour stale clock. A run that was never ended kept counting as active, so the context guard refused the main session any helper agent other than the Lead. Rows from non-aico subagents no longer count as run activity (PR #102).
+- **The `.env` guard no longer refuses code written through a heredoc.** A pattern such as `.*` inside a heredoc body was read as a file glob that could match `.env`. The shell never expands globs there, so a body is now checked for literal `.env` names only (PR #102).
+
+### Added
+- **A test that every CEO-only command says when to use it.** It fails if a skill with `disable-model-invocation: true` has no "Use when", "Use for" or "Use after" in its description (PR #101).
+
 ## [0.45.2] - 2026-11-24
 
 Rollback: node scripts/stable.mjs 0.45.1
