@@ -631,47 +631,6 @@ describe('AC8 guided first product', () => {
 
 });
 
-describe('AC9 rule-check fills missing security rows', () => {
-  const PACK = '---\ntool: fx\n---\n## Must\n- fx.M1 — plain must — source: x\n- fx.M-SEC1 — first security rule — why: w — source: https://example.test/a\n## Security\n- fx.M-SEC2 — second security rule — why: w — source: https://example.test/b\n';
-  function fillSetup(sb, { packs = { 'fx@1.md': PACK } } = {}) {
-    const dir = path.join(sb.dir, 'fill');
-    const packDir = path.join(dir, 'packs');
-    fs.mkdirSync(packDir, { recursive: true });
-    for (const [name, text] of Object.entries(packs)) fs.writeFileSync(path.join(packDir, name), text);
-    const file = path.join(dir, 'standards.md');
-    fs.writeFileSync(file, '# Ruleset\n## Packs\n- .company/standards/fx@1.md — researched 2026-10-29\n## Project rules\n- proj.M1 — own rule\n## Exceptions\n## Debt\n');
-    return { dir, packDir, file };
-  }
-  test('adds the missing security rows, reports each id and adds nothing on a second run', () => {
-    const sb = sandbox();
-    const f = fillSetup(sb);
-    const r = node(sb, f.dir, 'rule-check.mjs', ['fill-security', f.file, '--packs', f.packDir]);
-    assert.equal(r.code, 0, r.all);
-    assert.deepEqual(r.lines.filter((l) => l.startsWith('added ')), ['added fx.M-SEC1', 'added fx.M-SEC2']);
-    const text = fs.readFileSync(f.file, 'utf8');
-    assert.match(text, /## Security rows \(filled by rule-check\)\n- fx\.M-SEC1 — /);
-    assert.ok(!text.includes('plain must'));
-    const again = node(sb, f.dir, 'rule-check.mjs', ['fill-security', f.file, '--packs', f.packDir]);
-    assert.match(again.out, /nothing to add/);
-    assert.equal(fs.readFileSync(f.file, 'utf8'), text);
-  });
-  test('hostile: a pack row with a bidi control is skipped, and a standards file with a CR byte is refused unchanged', () => {
-    const sb = sandbox();
-    const evil = PACK.replace('first security rule', 'first ‮ security rule');
-    const f = fillSetup(sb, { packs: { 'fx@1.md': evil } });
-    const r = node(sb, f.dir, 'rule-check.mjs', ['fill-security', f.file, '--packs', f.packDir]);
-    assert.match(r.out, /skipped fx\.M-SEC1/);
-    assert.ok(!fs.readFileSync(f.file, 'utf8').includes('‮'));
-    const crFile = path.join(f.dir, 'cr.md');
-    fs.writeFileSync(crFile, '# Ruleset\r\n## Packs\r\n- .company/standards/fx@1.md — x\r\n');
-    const before = fs.readFileSync(crFile);
-    const refused = node(sb, f.dir, 'rule-check.mjs', ['fill-security', crFile, '--packs', f.packDir]);
-    assert.equal(refused.code, 2, refused.all);
-    assert.match(refused.out, /^refused: /m);
-    assert.deepEqual(fs.readFileSync(crFile), before);
-  });
-});
-
 describe('AC10 fresh rule packs are reused', () => {
   const day = (ago) => new Date(Date.now() - ago * 86400000).toISOString().slice(0, 10);
   function packOf(sb, { age, versions = '">=19 <20"', name = 'react@19.md', advisories } = {}) {

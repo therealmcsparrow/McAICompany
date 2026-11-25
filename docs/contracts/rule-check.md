@@ -1,4 +1,6 @@
-# Contract: rule-check v1.7
+# Contract: rule-check v2.0
+
+v2.0 (roadmap "Drop Fill Security"; major, `docs/adr/0007-contract-minor-versions.md`): the `fill-security` command is removed; it now prints the usage text, exit 2. Reason: it copied every loaded pack's `-SEC` Must rows into the Ruleset (78 rows in one run, 73 unwanted, longest 7909 characters), while `slices` already takes every security Must straight from the committed packs and never read those rows. An old `## Security rows (filled by rule-check)` section in a Ruleset is ignored by every command and may be deleted. No other command changes.
 
 v1.7 (task P20261120.000001, T32, cut C15; additive, `docs/adr/0007-contract-minor-versions.md`): new command `standing`. `standing --write` writes `.company/rules/standing-slice.md`: the Must rules in force (Project rules and committed packs, `M` and `M-SEC` IDs) plus the line `standards-sha256: <sha-256 of .company/standards.md>`; temp file plus rename, LF only, exit 0; a missing `standards.md` is `refused: no standards.md`, exit 2, nothing written. `standing check` prints `fresh` when the slice exists and its sha equals the current `standards.md`, else `stale` (also for a missing slice or standards file); exit 0. Export `standingFresh(root)` returns the same as a boolean. Exactly one of `--write` or `check` is accepted. No other command changes.
 
@@ -45,15 +47,6 @@ Every command takes `--root <dir>` (default: the current directory, which the Le
 | `slices <senior-engineer handoff> --write` | (Fix round 4) writes the slice files of every row into `<Handoff folder>/rules/` ("Slice files"), then runs the check above; prints `wrote <n> slices` plus any gaps; exit 1 on a gap or a refusal |
 | `standing --write` / `standing check` | (v1.7, C15) writes the standing slice / prints `fresh` or `stale`; exit 0, 2 on a refusal |
 | `drift` | exit 1 when a binding's `rule` is missing, its `text` hash no longer matches the rule, or a Project rule has a `check:` ID with no binding |
-| `fill-security <standards.md> --packs <dir>` | (v1.1, AC9) appends the `-SEC` Must rows the Ruleset lacks ("Fill security rows"); prints `added <id>` per row, or `nothing to add`; exit 0, 2 on a refusal with nothing written |
-
-## Fill security rows (v1.1)
-Run only by the Senior Engineer Step. The added rows are unsigned: `aico:ruleset` sign-off by the Architect still applies, and the command never writes a signed-off line (it does not touch `signed-off:`).
-- **Packs read:** only files named under the Ruleset's `## Packs` (a list entry `- <path> — …`; the path is reduced to its file name after the last `/` or `\`, which must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,60}@[A-Za-z0-9._-]{1,40}\.md$`), looked up by that name in `--packs <dir>`. A pack that is missing, a link, not a regular file or over 256 KiB is not read: `pack not read <name>`. Other files in the folder are never opened.
-- **Rows copied:** a line of a pack's `## Must` or `## Security` that parses as a rule line (`rule-pack` v1.1) with an ID `<tool>.M-SEC<n>`, byte for byte (a CR at the end of a pack line is dropped), never rebuilt. A line with a control character, DEL, a C1 control or a bidi control is not copied: `skipped <id>`. A line over 1000 characters is copied whole and reported `long <id>`.
-- **Lacks:** the Ruleset has no line starting `- <ID> — ` under `## Project rules` or `## Security rows (filled by rule-check)`. The ID in `## Debt`, `## Exceptions`, prose or any other section does not count. Each ID is added once.
-- **Where:** at the end of the `## Security rows (filled by rule-check)` section (created at the end of the file, after a blank line, when missing). A second marker heading is refused.
-- **Refusals** (`refused: …`, exit 2, nothing written): the standards file is a link or not a regular file, is over 256 KiB, holds a CR byte, or would pass 256 KiB with the new rows; `--packs` is missing, repeated or not a folder; the marker heading appears twice. The write is a temp file in the same folder plus rename (LF only). A second run adds nothing.
 
 ## Slice files (Fix round 4)
 A builder reads only its task's slice file, never the senior-engineer Handoff or the whole ruleset. Reason: in T15b the builder read the 16,765-byte Handoff 04, which holds rule IDs for every task but no rule text, and its spend rose 37.1% (`48-ai-data-engineer.md`).
