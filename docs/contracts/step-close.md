@@ -1,10 +1,12 @@
-# Contract: step-close v1.2
+# Contract: step-close v1.3
+
+v1.3 (additive): the lines of stage 2 are followed by the `handoff-lint` field warnings (handoff v3.1), passed on unchanged: `warning line <n>: tests|closes|open|next-step shape` and `warning: next-step and ## Next name different Roles`. No other lint warning is printed. Exit codes are unchanged.
 
 v1.2 (additive): when no candidate survives the Commit stage (`keep` empty), no commit is made, the first line prints `commit none`, stages 4-7 still run and the exit code is 0 (R-16); before, it exited 3.
 
 v1.1 (additive): `scope` drops `qa-owned` paths from the commit and prints the `qa-owned` and `scope:` lines of `plan-tasks scope`; a failure of stages 5-7 exits 4, not 1; the plan and the ledger are read through `plan-tasks` `readPlan` (hash compared with the begin hash) and `ledger` `hasHookRow`, never with a plain file read (`proj.M-SEC7`).
 
-Provider: `scripts/step-close.mjs` (Node built-ins only; plan tasks P20261120.000001-T25, -T26). Consumer: the Lead through `aico:pipeline` (one call after every Step). Uses: `handoff` v3.0 (lint, frontmatter `files-touched`), `plan-tasks` v1.11 (`scope`, `done`, `next`, the record's running task sets and the exported `readPlan`, read-only), `tier-sets` v2.0 (`sync`), `route` v2.0 (`next`), `token-ledger` v1.15 (`hasHookRow`; `add` only with `--usage`), `work-folder-name` v3.0 (`isRunSlug`, `exactWorkPath`).
+Provider: `scripts/step-close.mjs` (Node built-ins only; plan tasks P20261120.000001-T25, -T26). Consumer: the Lead through `aico:pipeline` (one call after every Step). Uses: `handoff` v3.1 (lint, frontmatter `files-touched`), `plan-tasks` v1.11 (`scope`, `done`, `next`, the record's running task sets and the exported `readPlan`, read-only), `tier-sets` v2.0 (`sync`), `route` v2.0 (`next`), `token-ledger` v1.15 (`hasHookRow`; `add` only with `--usage`), `work-folder-name` v3.0 (`isRunSlug`, `exactWorkPath`).
 Rationale: the Lead closed each Step with 6-9 separate calls (lint, ledger, scope, commit, done, next, tier sync, route); each call filled the Lead's context and caused a Lead hand-over every ~2.5 Steps in run P20261117.000001. One command runs the same checks in the same order and prints one block. No check is dropped.
 
 ## CLI
@@ -30,10 +32,10 @@ Candidates = the Handoff path + every item of the Handoff's frontmatter `files-t
 7. **Route next** (only without `--task` and when the run has `route.jsonl`): `route next <slug>`; printed as `next: <json>`.
 
 ## Output
-First line: `step-close: <NN> <role> lint ok, commit <short sha|none>, <k> paths, <d> dropped, ledger <hook|added|missing>`. Then the lines of stages 2 and 4-7 in order. Exit 0 when every stage that ran succeeded.
+First line: `step-close: <NN> <role> lint ok, commit <short sha|none>, <k> paths, <d> dropped, ledger <hook|added|missing>`. Then the lines of stage 2, the handoff field warnings (only the lines `handoff-lint` prints in the fixed forms above, never Handoff text), then the lines of stages 4-7 in order. Exit 0 when every stage that ran succeeded.
 
 ## Exit codes
 0 done (also when nothing was committed, `commit none`); 1 lint or scope failed (nothing committed); 2 refused argument (nothing run); 3 git failed (`status` unreadable, or `add`/`commit` failed; nothing committed); 4 the commit was made, then a stage 5-7 failed (`step-close: <stage> failed, commit kept`; the printed lines say which). The Lead does not redo the Step on 4.
 
 ## Compatibility
-v1.2. A new optional flag or a new printed line after the first is a minor bump. Dropping a stage, changing the order, reading commit paths from anything but `files-touched`, or committing on a lint or scope failure is a major bump and needs the CEO.
+v1.3. A new optional flag or a new printed line after the first is a minor bump. Dropping a stage, changing the order, reading commit paths from anything but `files-touched`, or committing on a lint or scope failure is a major bump and needs the CEO.

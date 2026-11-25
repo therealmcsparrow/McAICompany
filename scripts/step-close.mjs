@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// step-close (contract: docs/contracts/step-close.md v1.2, plan task T25, T26: stages 1-4 lint, scope, commit, ledger; 5-7 done and next, tier sync, route next). Node built-ins only.
+// step-close (contract: docs/contracts/step-close.md v1.3, plan task T25, T26: stages 1-4 lint, scope, commit, ledger; 5-7 done and next, tier sync, route next). Node built-ins only.
 // One call after a Step: lint the Handoff, scope the commit candidates, commit them, record the ledger row. Every argument is
 // untrusted; output holds fixed words, the slug, <NN>, <role>, digits and paths that passed the path rule.
 // Git and the sibling scripts are started with argv arrays, never through a shell.
@@ -17,6 +17,8 @@ const MSG_RE = /^(feat|fix|test|docs|refactor|chore): [\p{L}\p{N} .,:;/_()+#-]{1
 const NN_RE = /^(?!0+$)\d{2,3}$/;
 const ROLE_RE = /^[a-z][a-z0-9-]{0,40}$/;
 const USAGE_RE = /^(\d{1,8}),(\d{1,6}),(\d{1,9})$/;
+// Handoff field warnings of handoff-lint (handoff v3.1): the only lint warnings step-close prints, fixed words and a line number.
+const FIELD_WARN = /^warning(?: line \d{1,6}: (?:tests|closes|open|next-step) shape|: next-step and ## Next name different Roles)$/;
 const BAD_CHARS = /["'`$\\*?[\u0000-\u001f\u007f]/u;
 
 class Refusal extends Error {}
@@ -72,7 +74,7 @@ function gitChanged(root) {
   return set;
 }
 
-// Stage 1: returns { ok, files } or { ok: false, lines }.
+// Stage 1: returns { ok, files, warnings } or { ok: false, lines }.
 function lint(root, handoff) {
   const r = node('handoff-lint.mjs', [handoff], root);
   if (r.code !== 0) return { ok: false, lines: r.lines.filter((l) => l.startsWith('ERROR ')) };
@@ -82,7 +84,7 @@ function lint(root, handoff) {
     const routing = JSON.parse(last);
     if (Array.isArray(routing['files-touched'])) files = routing['files-touched'].filter((f) => typeof f === 'string');
   } catch { /* unreadable routing line: no extra candidates */ }
-  return { ok: true, files };
+  return { ok: true, files, warnings: r.lines.filter((x) => FIELD_WARN.test(x)) };
 }
 
 // Stage 2. Returns { fail, lines, candidates, dropped }.
@@ -154,7 +156,7 @@ export function close(argv, root = process.cwd()) {
   const cands = [...new Set([a.handoff, ...l.files])];
   const s = scope(root, a, cands);
   if (s.fail) return { code: 1, lines: [...s.lines, 'step-close: scope failed'] };
-  const out = [...s.lines];
+  const out = [...s.lines, ...l.warnings];
   let dropped = s.dropped;
 
   const changed = gitChanged(root);
