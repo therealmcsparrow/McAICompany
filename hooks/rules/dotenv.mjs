@@ -340,6 +340,42 @@ function expansionWords(command, hosted = false) {
   return words;
 }
 
+// A heredoc operator: `<<DELIM`, `<<-DELIM`, `<<'DELIM'`, `<<"DELIM"` or `<<\DELIM` (never `<<<`).
+const HEREDOC_OP = /(?<!<)<<(?!<)(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\?([A-Za-z_][A-Za-z0-9_.-]*))/g;
+
+// Splits heredoc bodies out of a command. The shell never glob-expands a body, so `.*` in code
+// written through `cat > f <<'EOF'` names no file. A body may still be fed to a shell, so it is
+// checked for literal dotenv names only. An unclosed body runs to the end.
+function splitHeredocs(command) {
+  const lines = command.split('\n');
+  const shell = [];
+  const bodies = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    shell.push(line);
+    i += 1;
+    for (const m of line.matchAll(HEREDOC_OP)) {
+      const delim = m[2] ?? m[3] ?? m[4];
+      const body = [];
+      while (i < lines.length) {
+        const l = lines[i].replace(/\r$/, '');
+        i += 1;
+        if ((m[1] === '-' ? l.replace(/^\t+/, '') : l) === delim) break;
+        body.push(l);
+      }
+      bodies.push(body.join('\n'));
+    }
+  }
+  return { shell: shell.join('\n'), bodies };
+}
+
+function literalDotenv(token) {
+  const base = baseName(normalizePath(token.replace(/\\(.)/g, '$1')));
+  if (TEMPLATES.has(base)) return false;
+  return base === '.env' || base.startsWith('.env.') || SHORT_NAME.test(base);
+}
+
 function decide(event) {
   const tool = event?.tool;
   if (!tool || typeof tool !== 'object') return false;
@@ -353,10 +389,14 @@ function decide(event) {
   }
   if (typeof tool.command === 'string') {
     if (tool.command.length > MAX_COMMAND_CHARS) return true;
-    for (const token of commandTokens(tool.command)) {
+    const { shell, bodies } = splitHeredocs(tool.command);
+    for (const body of bodies) {
+      if (body.split(SEPARATORS).some(literalDotenv)) return true;
+    }
+    for (const token of commandTokens(shell)) {
       if (deniesToken(token, budget, leadingWild)) return true;
     }
-    for (const word of expansionWords(tool.command, tool.name === 'Bash' && POWERSHELL_HOST.test(tool.command))) {
+    for (const word of expansionWords(shell, tool.name === 'Bash' && POWERSHELL_HOST.test(tool.command))) {
       if (word.length > MAX_PATH_CHARS && !SEPARATORS.test(word)) return true;
       if (word.length <= MAX_PATH_CHARS && deniesSpelling(word, budget, true, leadingWild)) return true;
     }
