@@ -72,7 +72,7 @@ All four keys are optional; a Handoff without them is a valid v3.0 Handoff. The 
 | `next-step:` | `<role id> — <goal, 1-160 chars>` or `none`; `<role id>` is a Role id or `ceo` | `{role, goal}`, `"none"` or `null` |
 
 - A bad shape prints `warning line <n>: tests shape`, `closes shape`, `open shape` or `next-step shape` (`<n>` is the key's line). In `closes`/`open` a non-list or an item that is not an ID warns, and bad items are dropped from the routing JSON.
-- When `next-step:` and the first bullet of `## Next` both name a Role (a whole word that is a Role id of the plugin's `agents/`, or `ceo`) and the Roles differ, the lint prints `warning: next-step and ## Next name different Roles`. A bullet with no Role gives no warning.
+- A Role in the first bullet of `## Next` is a Role id of the plugin's `agents/` (or `ceo`) that is the first word of the bullet or wrapped in backticks; Role words elsewhere in the bullet are prose and do not count. When `next-step:` names a Role and the bullet names a different one, or `next-step: none` while the bullet names a Role, the lint prints `warning: next-step and ## Next name different Roles`. A bullet with no Role gives no warning. `tests:` and `next-step:` are read as written, so a ` #` stays part of the value.
 - Warnings carry fixed words, line numbers and key names only, never Handoff text. They are never an ERROR: exit code and routing otherwise unchanged.
 - `closes:`/`open:` are informational. Finding states stay derived as in parts 4 and 5; these keys never set or change a state.
 

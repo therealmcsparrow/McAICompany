@@ -135,3 +135,60 @@ test('CLI: a bad tests key exits 0 and prints the warning before the JSON line',
   assert.equal(out[0], `warning line ${lineOf(text, 'tests')}: tests shape`);
   assert.equal(JSON.parse(out[1]).tests, null);
 });
+
+test('prose Role word in Next gives no mismatch', () => {
+  const r = lint(handoff(['next-step: code-reviewer — x'], 'Lead dispatches code-reviewer for the security pass'), {});
+  assert.deepEqual(r.warnings, []);
+});
+
+test('Role as first word of Next that differs warns', () => {
+  const r = lint(handoff(['next-step: qa — x'], 'security reviews auth'), {});
+  assert.deepEqual(r.warnings, ['warning: next-step and ## Next name different Roles']);
+});
+
+test('backticked Role in Next counts', () => {
+  const r = lint(handoff(['next-step: security — x'], 'then `qa` runs'), {});
+  assert.deepEqual(r.warnings, ['warning: next-step and ## Next name different Roles']);
+});
+
+test('next-step none while Next names a Role warns', () => {
+  const r = lint(handoff(['next-step: none'], 'qa runs the suite'), {});
+  assert.deepEqual(r.warnings, ['warning: next-step and ## Next name different Roles']);
+});
+
+test('next-step none with no Role in Next gives no warning', () => {
+  const r = lint(handoff(['next-step: none'], 'nothing more'), {});
+  assert.deepEqual(r.warnings, []);
+});
+
+test('next-step goal keeps " #" text', () => {
+  const r = lint(handoff(['next-step: qa — fix issue #12'], 'qa fixes'), {});
+  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.routing['next-step'], { role: 'qa', goal: 'fix issue #12' });
+});
+
+test('tests log path with " #" is a shape warning', () => {
+  const text = handoff(['tests: unit pass 1 fail 0 log logs/a #1.txt']);
+  const r = lint(text, {});
+  assert.deepEqual(r.warnings, [`warning line ${lineOf(text, 'tests')}: tests shape`]);
+  assert.equal(r.routing.tests, null);
+});
+
+test('tests without skip or log', () => {
+  const r = lint(handoff(['tests: unit pass 3 fail 0']), {});
+  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.routing.tests, { scope: 'unit', pass: 3, fail: 0, skip: null, log: null });
+});
+
+test('closes with an empty item warns and keeps the rest', () => {
+  const text = handoff(['closes: [R-1, , R-2]']);
+  const r = lint(text, {});
+  assert.deepEqual(r.warnings, [`warning line ${lineOf(text, 'closes')}: closes shape`]);
+  assert.deepEqual(r.routing.closes, ['R-1', 'R-2']);
+});
+
+test('empty open list is fine', () => {
+  const r = lint(handoff(['open: []']), {});
+  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.routing.open, []);
+});
