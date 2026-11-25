@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-25
+
+Rollback: node scripts/stable.mjs 0.45.3
+
 ### Removed
 - `rule-check fill-security` (contract rule-check v2.0). It copied every loaded pack's security Must rows into the Ruleset: 78 rows in one run, 73 unwanted, the longest 7909 characters. `slices` already reads security Musts straight from the committed packs, so the guarantee holds without the copies. `aico:ruleset` now says never copy them; an old `## Security rows (filled by rule-check)` section is ignored and may be deleted.
 
