@@ -32,7 +32,7 @@ Candidates = the Handoff path + every item of the Handoff's frontmatter `files-t
 7. **Route next** (only without `--task` and when the run has `route.jsonl`): `route next <slug>`; printed as `next: <json>`.
 
 ## Output
-First line: `step-close: <NN> <role> lint ok, commit <short sha|none>, <k> paths, <d> dropped, ledger <hook|added|missing>`. Then the lines of stage 2, the handoff field warnings (only the lines `handoff-lint` prints in the fixed forms above, never Handoff text), then the lines of stages 4-7 in order. Exit 0 when every stage that ran succeeded.
+First line: `step-close: <NN> <role> lint ok, commit <short sha|none>, <k> paths, <d> dropped, ledger <hook|added|missing>`. Then, in this order: the lines of stage 2, the handoff field warnings (only the lines `handoff-lint` prints in the fixed forms above, never Handoff text), the stage-3 `dropped:` lines, then the lines of stages 4-7 in order. Exit 0 when every stage that ran succeeded.
 
 ## Exit codes
 0 done (also when nothing was committed, `commit none`); 1 lint or scope failed (nothing committed); 2 refused argument (nothing run); 3 git failed (`status` unreadable, or `add`/`commit` failed; nothing committed); 4 the commit was made, then a stage 5-7 failed (`step-close: <stage> failed, commit kept`; the printed lines say which). The Lead does not redo the Step on 4.
