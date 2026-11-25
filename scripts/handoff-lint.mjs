@@ -151,10 +151,14 @@ function checkModeKeys(fm, at, fresh, errors, warnings) {
 const AGENTS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents');
 let roleIds = null;
 
+function roleSet() {
+  roleIds ??= (() => { try { return new Set(readdirSync(AGENTS_DIR).filter(n => n.endsWith('.md')).map(n => n.slice(0, -3))); } catch { return new Set(); } })();
+  return roleIds;
+}
+
 function isRoleId(w) {
   if (w === 'ceo') return true;
-  roleIds ??= (() => { try { return new Set(readdirSync(AGENTS_DIR).filter(n => n.endsWith('.md')).map(n => n.slice(0, -3))); } catch { return new Set(); } })();
-  return roleIds.has(w);
+  return roleSet().has(w);
 }
 
 // Optional fields (handoff v3.1). A bad shape is a warning that names the key and line only, never Handoff text.
@@ -183,7 +187,8 @@ function checkFields(fm, raw, at, nextBullet, warnings) {
   }
   if ('next-step' in fm) {
     const m = NEXT_STEP_RE.exec(raw['next-step']);
-    if (!m) warnings.push(`warning line ${at['next-step']}: next-step shape`);
+    // An unreadable agents/ folder gives an empty set: then any well-formed id passes.
+    if (!m || (m[1] !== undefined && roleSet().size > 0 && !isRoleId(m[1]))) warnings.push(`warning line ${at['next-step']}: next-step shape`);
     else {
       const named = namedRole(nextBullet ?? '');
       out.nextStep = m[1] === undefined ? 'none' : { role: m[1], goal: m[2] };

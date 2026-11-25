@@ -4,7 +4,7 @@ export const DEP_HASHES = {
   "scripts/company-type.mjs": "967e95594fb7dc5695d4d61d4fc89288d0291059bc1fcdc35ed394fb11b9094b",
   "scripts/contract-drift.mjs": "02e65a1fe059df5b56e8647e8ac0de66aada565837f909328961eb82b047ccbf",
   "scripts/forced-tokens.mjs": "48dfbf4ac5caa9646edc1c91d61647b074bbf76bcd6b2f3b6a3729b32070c307",
-  "scripts/handoff-lint.mjs": "798a62e37602ebeb1c6eaf736e43ab3bbc058f5a9e231893dcbf6e7b14706f29",
+  "scripts/handoff-lint.mjs": "e036c056a8a4d8879bb02af5e8ffadba22fa10735f1a83e212fda423fa8351e2",
   "scripts/idea-flow.mjs": "dab49706de84f46a37d85e3c13f87fd205a76cf2381d4bf3d845471b39ed1430",
   "scripts/lead-handover.mjs": "32b7c51f126b623c31988e497407323b2eee71683f882fcd3f5beea6a08810a6",
   "scripts/lead-relay.mjs": "6de74ee33cf00dd27206996dbe54e9dfd9f08008081e09c0e2da8b2cc8d1ab5c",

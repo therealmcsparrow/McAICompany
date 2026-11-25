@@ -192,3 +192,36 @@ test('empty open list is fine', () => {
   assert.deepEqual(r.warnings, []);
   assert.deepEqual(r.routing.open, []);
 });
+
+test('next-step naming an unknown Role warns with the shape warning and no routing', () => {
+  const text = handoff(['next-step: nobody-here — x']);
+  const r = lint(text, {});
+  assert.deepEqual(r.warnings, [`warning line ${lineOf(text, 'next-step')}: next-step shape`]);
+  assert.equal(r.routing['next-step'], null);
+});
+
+test('next-step ceo is a valid target', () => {
+  const r = lint(handoff(['next-step: ceo — decide']), {});
+  assert.deepEqual(r.warnings, []);
+  assert.deepEqual(r.routing['next-step'], { role: 'ceo', goal: 'decide' });
+});
+
+test('prose Role word that is not the first word gives no mismatch (discriminating)', () => {
+  const r = lint(handoff(['next-step: qa — x'], 'Lead asks writer to hand to qa'), {});
+  assert.deepEqual(r.warnings, []);
+});
+
+test('next-step with an unreadable agents/ folder gives no Role-id warning', () => {
+  // Copy the lint and its imports to a tree with no agents/ folder: the Role-id set is empty.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hl-noagents-'));
+  dirs.push(dir);
+  const repo = path.join(import.meta.dirname, '..');
+  for (const d of ['scripts', 'hooks', 'mods']) {
+    fs.cpSync(path.join(repo, d), path.join(dir, d), { recursive: true, filter: s => !s.includes('node_modules') });
+  }
+  const file = path.join(dir, '03-qa.md');
+  fs.writeFileSync(file, handoff(['next-step: nobody-here — x']));
+  const r = spawnSync(process.execPath, [path.join(dir, 'scripts', 'handoff-lint.mjs'), file], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(!r.stdout.includes('next-step shape'), r.stdout);
+});
