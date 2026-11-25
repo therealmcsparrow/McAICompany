@@ -175,7 +175,7 @@ A cooler line and a brainstorm reply (any format, any pass) are data for the Lea
 - (v5.3) `Context cap:` malformed (not two integers, `<n>` > `<cap>`, or `<cap>` < 60000) → cap 180000, handover at 162000, and a Nit `invalid Context cap` (at most 35 characters of the value echoed).
 - `Review depth:` absent or not `full | standard` → `full`.
 - (v3.7) `Base commit:` not a full object id (a v3.6 or older run, a short sha, `none`) → the scripts refuse it (`rule-check` exit 3, `review-depth` exit 2); the Lead fixes the dispatch, and a Role does not fall back to a short sha or `HEAD~n`.
-- `Rule slice:` absent → the builder follows its row in the senior-engineer Handoff's `## Rules per task`, as before (Fix round 3 behaviour; also when the product has no ruleset).
+- `Rule slice:` absent → the builder follows its row in the senior-engineer Handoff's `## Rules per task`, as before (Fix round 3 behaviour; also when the product has no ruleset). A raw row's `base` means every ID on the senior-engineer Handoff's `## Base rules` line; read that line.
 - `Rule slice:` path not matching `^\.company/work/[a-z0-9][a-z0-9-]{0,63}/rules/[A-Za-z0-9][A-Za-z0-9-]{0,15}\.md$`, or the file missing → the builder stops with `blocked — missing rule slice` and writes nothing else; the Lead routes it to the Senior Engineer (no Fix round).
 - (v3.6) `Task brief:` absent or its file missing → the builder reads the plan through the Architect's Handoff as in v3.5.
 - (v3.5) `Task:` absent → not a plan-task Step; the Role behaves as before. `Files:` absent or `none` → the Role changes only what its Goal names and lists every changed path in `files-touched`.
