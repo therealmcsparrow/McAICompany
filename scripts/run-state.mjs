@@ -359,7 +359,12 @@ function folderMtimes(dir) {
   try { names = readdirSync(dir); } catch { return null; }
   if (names.length > MAX_NAMES) {
     const key = n => n === 'run-state.jsonl' || STEP_FILE_RE.test(n);
-    names = [...names.filter(key).sort().reverse(), ...names.filter(n => !key(n))].slice(0, MAX_NAMES);
+    const stepCmp = (a, b) => parseInt(b, 10) - parseInt(a, 10) || (a < b ? 1 : a > b ? -1 : 0);
+    names = [
+      ...names.filter(n => n === 'run-state.jsonl'),
+      ...names.filter(n => n !== 'run-state.jsonl' && STEP_FILE_RE.test(n)).sort(stepCmp),
+      ...names.filter(n => !key(n)),
+    ].slice(0, MAX_NAMES);
   }
   let newest = 0;
   let newestStep = 0;
