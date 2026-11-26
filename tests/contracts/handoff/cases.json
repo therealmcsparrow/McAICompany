@@ -29,7 +29,11 @@
       "files-touched": [
         "src/x.ts"
       ],
-      "blocking": []
+      "blocking": [],
+      "tests": null,
+      "closes": [],
+      "open": [],
+      "next-step": null
     }
   },
   "v1.2 reviewer row with R-id": {

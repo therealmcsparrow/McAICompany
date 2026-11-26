@@ -43,7 +43,7 @@ function git(root, home, ...args) {
   return r.stdout;
 }
 
-const handoff = ({ task = SLUG, role = 'qa', step = '05', touched = [], did = '- x', status = 'done' } = {}) => `---
+const handoff = ({ task = SLUG, role = 'qa', step = '05', touched = [], did = '- x', status = 'done', fm = '' } = {}) => `---
 step: ${step}
 role: ${role}
 task: ${task}
@@ -54,7 +54,7 @@ risk-tier: high
 acceptance-ids: [AC1]
 files-touched: [${touched.join(', ')}]
 contracts: [${HANDOFF_V}]
----
+${fm}---
 By: ${role}
 ## Did
 ${did}
@@ -355,4 +355,26 @@ test('R-16: gitignored .company/ and a Handoff-only close makes no commit, print
   assert.equal(f.count(), before, 'no commit is made');
   assert.match(r.out, /^ledger: added$/m, 'stages 4-7 still run');
   assert.equal(f.rows(), 1);
+});
+
+test('field warnings pass through: a bad tests field prints its warning line after the first, exit 0, first line unchanged', () => {
+  const f = fixture();
+  const r = f.run({ text: handoff({ touched: ['src/free.txt'], fm: 'tests: all green\n' }) });
+  assert.equal(r.code, 0, r.all);
+  const lines = r.out.split('\n').filter(Boolean);
+  assert.ok(FIRST.test(lines[0]), lines[0]);
+  const w = lines.filter((l) => /^warning line \d+: tests shape$/.test(l));
+  assert.equal(w.length, 1, r.out);
+  assert.ok(lines.indexOf(w[0]) > 0, 'after the first line');
+  assert.ok(!r.out.includes('all green'), 'Handoff text is never echoed');
+});
+
+test('other lint warnings are not passed through: only allowlisted warning lines appear in the block', () => {
+  const f = fixture();
+  const r = f.run({ text: handoff({ touched: ['src/free.txt'], fm: 'tests: <b>x</b>\n' }) });
+  assert.equal(r.code, 0, r.all);
+  const FIELD = /^warning(?: line \d{1,6}: (?:tests|closes|open|next-step) shape|: next-step and ## Next name different Roles)$/;
+  for (const l of r.out.split('\n').filter((x) => x.startsWith('warning'))) assert.ok(FIELD.test(l), l);
+  assert.ok(!r.out.includes('files-touched'), 'the routing JSON line is not passed through');
+  assert.ok(!r.out.includes('<b>'), 'Handoff text is never echoed');
 });

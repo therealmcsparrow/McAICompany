@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v2.0). Node built-ins only.
+// Tool checks bound to ruleset rules by ID (contract: docs/contracts/rule-check.md v2.1). Node built-ins only.
 // Rule text is data: it is printed and hashed, never run or put into a command (agentsec.M-SEC7).
 // Tools run with spawnSync and an argument array, never through a shell (node.M-SEC1).
 import crypto from 'node:crypto';
@@ -762,6 +762,38 @@ function taskRows(text) {
   return rows;
 }
 
+// The IDs on the single `- base: ...` line of `## Base rules`, or null when there is no section.
+function baseIds(text) {
+  let found = false;
+  let ids = [];
+  for (const { section, line } of sections(text)) {
+    if (section !== 'Base rules') continue;
+    found = true;
+    const m = /^-\s*base:(.*)$/.exec(line);
+    if (m) {
+      ids = uniq(m[1].match(RULE_ID_ANY) ?? []);
+      break;
+    }
+  }
+  return found ? ids : null;
+}
+
+const BASE_TOKEN = /(^|[\s,;|])base(?=$|[\s,;|])/;
+
+// Replaces the standalone token `base` in each row with the base IDs.
+function expandBase(rows, base) {
+  const problems = [];
+  const out = rows.map(row => {
+    if (!BASE_TOKEN.test(row.rest)) return row;
+    if (base === null) {
+      problems.push(`${cut(row.cell0, 40)}: base used without ## Base rules`);
+      return row;
+    }
+    return { ...row, rest: row.rest.replace(new RegExp(BASE_TOKEN, 'g'), (m, pre) => `${pre}${base.join(', ')}`) };
+  });
+  return { rows: out, problems };
+}
+
 function cutWord(value, n) {
   if (value.length <= n) return value;
   let s = value.slice(0, n);
@@ -884,8 +916,9 @@ function cmdSlices(a) {
   const text = readCapped(file, MAX_TEXT_BYTES, 'handoff');
   const ctx = loadRules(a.root);
   if (!/^## Rules per task\s*$/m.test(text)) return { code: 1, lines: ['## Rules per task is missing'] };
-  const rows = taskRows(text);
-  const gaps = [];
+  const expanded = expandBase(taskRows(text), baseIds(text));
+  const rows = expanded.rows;
+  const gaps = [...expanded.problems];
   for (const row of rows) {
     const listed = new Set(row.rest.match(RULE_ID_ANY) ?? []);
     const missing = [...ctx.security].filter(id => !listed.has(id));

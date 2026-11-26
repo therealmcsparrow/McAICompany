@@ -4,6 +4,15 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+### Added
+- **Optional Handoff fields** (contract handoff v3.1): `tests:`, `closes:`, `open:` and `next-step: <role id> — <goal>` (or `none`). `handoff-lint` checks their shape and warns when `next-step:` names a different Role than the first `## Next` bullet.
+- **`step-close` passes lint warnings through** (contract step-close v1.3), so the Lead sees them even when the lint passes.
+- **`base` token in Rules per task** (contract rule-check v2.1): a row starts with `base` to stand for the IDs on the `## Base rules` line. `slices` expands it before the security-Must check; a row using `base` without that section fails.
+
+### Changed
+- Handoff writing rules (`aico:handoff`): Did never repeats `files-touched`, Did and Decisions hold no commit or lint boilerplate, `## Next` may be `- see next-step:`.
+- Lead route order: `route next` JSON from `step-close`, else `next-step:`, else the first `## Next` bullet.
+
 ## [0.46.1] - 2026-11-25
 
 Rollback: node scripts/stable.mjs 0.46.0

@@ -321,6 +321,58 @@ test('slices fails when the section or the file is missing', () => {
   assert.equal(gone.status, 2);
 });
 
+// ---------- slices: base token (rule-check v2.1) ----------
+
+const BASE_ALL = 'proj.M-SEC1, nodetest.M-SEC1';
+function baseFile(root, { base, rows }) {
+  const file = path.join(root, 'h.md');
+  const section = base === undefined ? '' : `## Base rules\n- base: ${base}\n`;
+  fs.writeFileSync(file, `## Did\n- x\n${section}## Rules per task\n| plan task | rule IDs |\n|---|---|\n${rows.join('\n')}\n## Next\n- done\n`);
+  return file;
+}
+
+test('base expands for the security check', () => {
+  const root = makeRoot();
+  const file = baseFile(root, { base: BASE_ALL, rows: ['| T1 | base, proj.M7 |', '| T2 | proj.M5; base |'] });
+  const r = cli(root, ['slices', file, '--root', root]);
+  assert.equal(r.status, 0, r.all);
+  assert.match(r.out, /slices ok/);
+});
+
+test('base missing a security Must fails and names it', () => {
+  const root = makeRoot();
+  const file = baseFile(root, { base: 'proj.M-SEC1', rows: ['| T1 | base, proj.M7 |'] });
+  const r = cli(root, ['slices', file, '--root', root]);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /T1.*nodetest\.M-SEC1/);
+});
+
+test('base without section fails', () => {
+  const root = makeRoot();
+  const file = baseFile(root, { rows: [`| T1 | base, ${BASE_ALL} |`] });
+  const r = cli(root, ['slices', file, '--root', root]);
+  assert.equal(r.status, 1);
+  assert.match(r.out, /base used without ## Base rules/);
+});
+
+test('base inside a word is not the token', () => {
+  const root = makeRoot();
+  const file = baseFile(root, { rows: [`| T1 | database, ${BASE_ALL} |`] });
+  const r = cli(root, ['slices', file, '--root', root]);
+  assert.equal(r.status, 0, r.all);
+});
+
+test('slice files are expanded', () => {
+  const root = makeRoot();
+  const file = baseFile(root, { base: `proj.M11, ${BASE_ALL}`, rows: ['| T1 | base |'] });
+  const r = cli(root, ['slices', file, '--write', '--root', root]);
+  assert.equal(r.status, 0, r.all);
+  const slice = fs.readFileSync(path.join(root, 'rules', 'T1.md'), 'utf8');
+  assert.match(slice, /proj\.M11/);
+  assert.match(slice, /proj\.M-SEC1/);
+  assert.doesNotMatch(slice, /(^|[\s,;|])base(?=$|[\s,;|])/);
+});
+
 // ---------- run: aico-check ----------
 
 test('run aico-check: one row per WARN line, none for a short agent', () => {

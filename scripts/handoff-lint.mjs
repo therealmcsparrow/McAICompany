@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lints a Handoff file (contract: docs/contracts/handoff.md v3.0): machine-read parts stay English whatever `Language:` is.
+// Lints a Handoff file (contract: docs/contracts/handoff.md v3.1): machine-read parts stay English whatever `Language:` is.
 // uses: docs/contracts/contract-index.md v1.1
 // The input is written by an LLM, so it is size-capped and read with anchored, linear patterns only.
 import { closeSync, constants, fstatSync, lstatSync, opendirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
@@ -18,7 +18,7 @@ const DEPTH = new Set(['quick', 'deep']);
 const TAGS = new Set(['contract', 'spec', 'security', 'test']);
 const BLOCK_TAGS = new Set([...TAGS, 'comprehension']);
 const KEYS = new Set(['step', 'role', 'task', 'status', 'round', 'base-commit', 'risk-tier', 'acceptance-ids',
-  'files-touched', 'fetches', 'depth', 'degraded', 'contracts', 'review-mode']);
+  'files-touched', 'fetches', 'depth', 'degraded', 'contracts', 'review-mode', 'tests', 'closes', 'open', 'next-step']);
 const REVIEW_MODES = new Set(['plan']);
 const MAX_EVIDENCE = 1024 * 1024;
 const MAX_RULINGS = 64 * 1024;
@@ -40,6 +40,8 @@ const MAX_STANDARDS = 256 * 1024;
 const REQUIRED = ['step', 'role', 'task', 'status', 'round', 'base-commit', 'risk-tier'];
 const REQUIRED_HEADINGS = ['Did', 'Blocking', 'Next'];
 const LIST_KEYS = new Set(['acceptance-ids', 'files-touched']);
+const TESTS_RE = /^(\S{1,120}) pass (\d{1,6}) fail (\d{1,6})(?: skip (\d{1,6}))?(?: log (\S{1,260}))?$/;
+const NEXT_STEP_RE = /^(?:none|([a-z][a-z0-9-]{0,40}|ceo) — (.{1,160}))$/;
 const ID_RE = /^[RCT]-\d{1,4}$/;
 const LOC_RE = /^([^\s:]{1,260})(?::(\d{1,6})(?:-(\d{1,6}))?)?$/;
 const NONE_RE = /^(none|\(none[^)]{0,100}\))\.?$/i;
@@ -91,6 +93,7 @@ function frontmatterOf(lines, errors, keys, required) {
   const end = lines.indexOf('---', 1);
   const fm = Object.create(null);
   const at = Object.create(null);
+  const raw = Object.create(null);
   for (let i = 1; i < end; i++) {
     const line = lines[i];
     if (line.trim() === '') continue;
@@ -100,9 +103,10 @@ function frontmatterOf(lines, errors, keys, required) {
     if (!keys.has(m[1])) { errors.push(`line ${i + 1}: unknown frontmatter key (keys are English)`); continue; }
     fm[m[1]] = value(m[2]);
     at[m[1]] = i + 1;
+    raw[m[1]] = m[2].trim();
   }
   for (const k of required) if (!(k in fm)) errors.push(`frontmatter: missing ${k}`);
-  return { fm, end, at };
+  return { fm, end, at, raw };
 }
 
 const CONTEST_HINT = {
@@ -142,6 +146,56 @@ function checkModeKeys(fm, at, fresh, errors, warnings) {
   } else if (fresh) {
     errors.push('frontmatter: missing review-mode');
   }
+}
+
+const AGENTS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'agents');
+let roleIds = null;
+
+function roleSet() {
+  roleIds ??= (() => { try { return new Set(readdirSync(AGENTS_DIR).filter(n => n.endsWith('.md')).map(n => n.slice(0, -3))); } catch { return new Set(); } })();
+  return roleIds;
+}
+
+function isRoleId(w) {
+  if (w === 'ceo') return true;
+  return roleSet().has(w);
+}
+
+// Optional fields (handoff v3.1). A bad shape is a warning that names the key and line only, never Handoff text.
+// A Role id in the first ## Next bullet counts only as its first word or wrapped in backticks.
+function namedRole(bullet) {
+  const first = bullet.trim().split(/[^A-Za-z0-9-]+/)[0];
+  if (first && isRoleId(first)) return first;
+  for (const m of bullet.matchAll(/`([A-Za-z0-9-]+)`/g)) if (isRoleId(m[1])) return m[1];
+  return undefined;
+}
+
+function checkFields(fm, raw, at, nextBullet, warnings) {
+  const out = { tests: null, closes: [], open: [], nextStep: null };
+  if ('tests' in fm) {
+    const m = TESTS_RE.exec(raw.tests);
+    if (!m) warnings.push(`warning line ${at.tests}: tests shape`);
+    else out.tests = { scope: m[1], pass: Number(m[2]), fail: Number(m[3]), skip: m[4] === undefined ? null : Number(m[4]), log: m[5] ?? null };
+  }
+  for (const k of ['closes', 'open']) {
+    if (!(k in fm)) continue;
+    const items = list(fm[k]);
+    const strict = strictList(fm[k]);
+    if (items === null) { warnings.push(`warning line ${at[k]}: ${k} shape`); continue; }
+    out[k] = items.filter(x => ID_RE.test(x));
+    if (strict === null || out[k].length !== items.length) warnings.push(`warning line ${at[k]}: ${k} shape`);
+  }
+  if ('next-step' in fm) {
+    const m = NEXT_STEP_RE.exec(raw['next-step']);
+    // An unreadable agents/ folder gives an empty set: then any well-formed id passes.
+    if (!m || (m[1] !== undefined && roleSet().size > 0 && !isRoleId(m[1]))) warnings.push(`warning line ${at['next-step']}: next-step shape`);
+    else {
+      const named = namedRole(nextBullet ?? '');
+      out.nextStep = m[1] === undefined ? 'none' : { role: m[1], goal: m[2] };
+      if (named !== undefined && named !== m[1]) warnings.push('warning: next-step and ## Next name different Roles');
+    }
+  }
+  return out;
 }
 
 // A fresh-reviewer Handoff opens with ## Paraphrase then ## First pass, and cites no run Handoff before the first pass ends.
@@ -266,7 +320,7 @@ export function lint(text, opts = {}) {
   if (lines[0] !== '---') return { errors: ['missing frontmatter'], warnings, routing: null };
   if (lines.indexOf('---', 1) < 0) return { errors: ['unterminated frontmatter'], warnings, routing: null };
 
-  const { fm, end, at } = frontmatterOf(lines, errors, KEYS, REQUIRED);
+  const { fm, end, at, raw } = frontmatterOf(lines, errors, KEYS, REQUIRED);
   if ('status' in fm && !STATUS.has(fm.status)) errors.push('frontmatter: status must be done|blocked|needs-ceo|handover');
   if ('risk-tier' in fm && !RISK.has(fm['risk-tier'])) errors.push('frontmatter: risk-tier must be low|medium|high');
   if ('depth' in fm && !DEPTH.has(fm.depth)) errors.push('frontmatter: depth must be quick|deep');
@@ -285,6 +339,7 @@ export function lint(text, opts = {}) {
   const order = []; // { name, i } of every heading outside a fence, in order
   const side = Object.create(null); // section -> [{ i, line }] of the sections whose lines are checked as written
   const items = []; // { i, section, body }
+  let nextBullet = null; // first bullet of ## Next
   let section = '';
   let fence = null;
   for (let i = end + 1; i < lines.length; i++) {
@@ -301,6 +356,10 @@ export function lint(text, opts = {}) {
     }
     const h = /^## (.*)$/.exec(line);
     if (h) { section = h[1].trim(); headings.add(section); order.push({ name: section, i }); continue; }
+    if (section === 'Next' && nextBullet === null) {
+      const nb = /^- (.*)$/.exec(line);
+      if (nb) nextBullet = nb[1];
+    }
     if (SIDE_SECTIONS.has(section) && line.trim() !== '') (side[section] ??= []).push({ i, line });
     if (section === 'Blocking' || section === 'Nits' || section === 'Contested' || section === 'Contests') {
       const b = /^- (.*)$/.exec(line);
@@ -354,6 +413,7 @@ export function lint(text, opts = {}) {
   checkSources(items, side, errors);
   checkProductManager(fm.role === 'product-manager', order, side, errors);
 
+  const fields = checkFields(fm, raw, at, nextBullet, warnings);
   const routing = {
     status: fm.status ?? null,
     round: fm.round ?? null,
@@ -362,6 +422,10 @@ export function lint(text, opts = {}) {
     'acceptance-ids': list(fm['acceptance-ids'] ?? '') ?? [],
     'files-touched': list(fm['files-touched'] ?? '') ?? [],
     blocking: tags,
+    tests: fields.tests,
+    closes: fields.closes,
+    open: fields.open,
+    'next-step': fields.nextStep,
   };
   return { errors, warnings, routing };
 }

@@ -18,7 +18,7 @@ This is also the start of a fresh Lead after a hard hand-over or a CEO answer; `
 - `gate <g> open`: run `run-state ask '<slug>' '<g>'`, then `lead-relay read '<slug>' --json`. No answer yet: `lead-relay again '<slug>' <id>` and end with that `STATUS: needs-ceo` block. An open Gate stays open until the CEO answers.
 - `pending idea-<f>`: run `idea-flow options '<slug>'`, open it as a form with `lead-relay open` and end with its block.
 - `pending step-<s>`: continue that inline step from its file.
-- `form: <id> <open|answered>`: read that form with `lead-relay read` and act only on the record. `form: none`: read the newest Step Handoff's frontmatter and `## Next`, and dispatch the next Step.
+- `form: <id> <open|answered>`: read that form with `lead-relay read` and act only on the record. `form: none`: read the newest Step Handoff's frontmatter and `## Next`, and dispatch the next Step. The next Step: the `route next` JSON from `step-close` when the run has `route.jsonl`; else the Handoff's `next-step:`; else the first `## Next` bullet.
 Then follow `## Next` of the Lead Handoff. The `gate` and `form` lines only point at the records; the answer to a form is a record event, so a form with no recorded answer is asked again (`lead-relay again`).
 
 ## Every run after a hand-over

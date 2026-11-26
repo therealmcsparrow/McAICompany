@@ -1771,7 +1771,7 @@ describe('AC32 the handoff Contract holds contested findings and the contracts f
     assert.match(unknown.all, /is not a Contract/);
     const stale = write('07-backend-engineer.md', base('contracts: [handoff v1.9]\n'));
     assert.equal(stale.code, 1, stale.all);
-    assert.match(stale.all, /handoff v1.9 is stale, current v3.0/);
+    assert.match(stale.all, /handoff v1.9 is stale, current v3.1/);
   });
   test('the shipped fixture set covers open, accepted and rejected contests', () => {
     const tests = read('scripts', 'handoff-contest.test.mjs');
