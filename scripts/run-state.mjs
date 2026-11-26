@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v3.1). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v3.2). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -350,10 +350,17 @@ export function runSlugs(root, { max = MAX_FOLDERS } = {}) {
   return out;
 }
 
-// Newest mtime (ms) of every file in a run folder and of its Step files (stat only, no file is opened, no name cap).
+// Newest mtime (ms) of the files in a run folder and of its Step files (stat only, no file is opened). At most
+// MAX_NAMES names are statted: run-state.jsonl and Step files first (highest Step number first), so a huge folder
+// cannot slow the hook and a fresh Step past the cap cannot hide.
+const MAX_NAMES = 1000;
 function folderMtimes(dir) {
   let names;
   try { names = readdirSync(dir); } catch { return null; }
+  if (names.length > MAX_NAMES) {
+    const key = n => n === 'run-state.jsonl' || STEP_FILE_RE.test(n);
+    names = [...names.filter(key).sort().reverse(), ...names.filter(n => !key(n))].slice(0, MAX_NAMES);
+  }
   let newest = 0;
   let newestStep = 0;
   for (const name of names) {

@@ -839,8 +839,8 @@ test('v3.0 show: the view cap and handover follow the snapshot, an edit applies 
   assert.deepEqual([viewOf(root).cap, viewOf(root).handover], [180000, 162000]);
 });
 
-test('v3.1 header: the Contract is run-state v3.1 and the script declares it', () => {
+test('v3.2 header: the Contract is run-state v3.2 and the script declares it', () => {
   const doc = fs.readFileSync(path.join(import.meta.dirname, '..', 'docs', 'contracts', 'run-state.md'), 'utf8');
-  assert.match(doc, /^# Contract: run-state v3\.1\r?$/m);
-  assert.match(fs.readFileSync(script, 'utf8').split('\n').slice(0, 3).join('\n'), /docs\/contracts\/run-state\.md v3\.1(?![\d.])/);
+  assert.match(doc, /^# Contract: run-state v3\.2\r?$/m);
+  assert.match(fs.readFileSync(script, 'utf8').split('\n').slice(0, 3).join('\n'), /docs\/contracts\/run-state\.md v3\.2(?![\d.])/);
 });

@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { active } from './run-state.mjs';
 
 const here = import.meta.dirname;
 const SCRIPT = path.join(here, 'lead-handover.mjs');
@@ -110,7 +111,6 @@ test('Stop measure with no live run opens a bounded number of files, not every o
 });
 
 // Edge coverage for the stat-only prefilter in run-state active(): it must never hide a run that is really active.
-import { active } from './run-state.mjs';
 
 function mkRun(work, id, { recAt, rsMtime, step }) {
   const dir = path.join(work, id, '01-fix');
@@ -160,4 +160,31 @@ test('active() returns null when every run is older than the stale window', () =
   const now = Date.now();
   mkRun(work, 'P20260105.000001', { recAt: now - 30 * HOUR, rsMtime: now - 30 * HOUR, step: now - 30 * HOUR });
   assert.equal(active(root, { now }).slug, null);
+});
+
+test('active() skips a run whose Step file was edited in place while the folder mtime is old', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  const slug = mkRun(work, 'P20260106.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR, step: now - 60000 });
+  const old = (now - 20 * HOUR) / 1000;
+  fs.utimesSync(path.join(work, slug.split('/')[0], '01-fix'), old, old);
+  assert.equal(active(root, { now }).slug, null);
+});
+
+test('active() skips a run whose folder is fresh but every file is stale', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  mkRun(work, 'P20260107.000001', { recAt: now - 30 * HOUR, rsMtime: now - 30 * HOUR, step: now - 30 * HOUR });
+  // folder mtime is fresh from file creation: leave it
+  assert.equal(active(root, { now }).slug, null);
+});
+
+test('active() still finds a fresh Step file in a folder with more files than the name cap', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  const slug = mkRun(work, 'P20260108.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
+  const dir = path.join(work, 'P20260108.000001', '01-fix');
+  for (let i = 0; i < 1100; i++) fs.writeFileSync(path.join(dir, `a${String(i).padStart(4, '0')}.txt`), 'x');
+  fs.writeFileSync(path.join(dir, '99-qa.md'), stepFile(99, 'qa'));
+  assert.equal(active(root, { now })?.slug, slug);
 });
