@@ -179,12 +179,77 @@ test('active() skips a run whose folder is fresh but every file is stale', () =>
   assert.equal(active(root, { now }).slug, null);
 });
 
+// Name cap (MAX_NAMES = 1000 in run-state.mjs). Filler names start with "0a", so they sort BEFORE every Step name and
+// before the state file in readdir order: a plain readdir().slice(0, 1000) would drop the fresh Step.
+const CAP = 1000;
+// Fillers are aged 20 h: a dropped Step must not be masked by a fresh filler mtime.
+const fillers = (dir, n) => {
+  const old = (Date.now() - 20 * HOUR) / 1000;
+  for (let i = 0; i < n; i++) {
+    const f = path.join(dir, `0a${String(i).padStart(4, '0')}.txt`);
+    fs.writeFileSync(f, 'x');
+    fs.utimesSync(f, old, old);
+  }
+};
+
 test('active() still finds a fresh Step file in a folder with more files than the name cap', () => {
   const { root, work } = root2();
   const now = Date.now();
   const slug = mkRun(work, 'P20260108.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
   const dir = path.join(work, 'P20260108.000001', '01-fix');
-  for (let i = 0; i < 1100; i++) fs.writeFileSync(path.join(dir, `a${String(i).padStart(4, '0')}.txt`), 'x');
+  fillers(dir, CAP + 100);
   fs.writeFileSync(path.join(dir, '99-qa.md'), stepFile(99, 'qa'));
+  assert.equal(active(root, { now })?.slug, slug);
+});
+
+// Child: counts lstat/stat calls on names inside the run folder while active() runs once.
+const CAP_CHILD = `
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import { syncBuiltinESMExports } from 'node:module';
+const [root, dir, script] = process.argv.slice(1);
+let n = 0;
+for (const name of ['lstatSync', 'statSync']) {
+  const orig = fs[name];
+  fs[name] = function (p, ...rest) { if (typeof p === 'string' && p.startsWith(dir) && p.length > dir.length) n++; return orig.call(this, p, ...rest); };
+}
+syncBuiltinESMExports();
+const { active } = await import(pathToFileURL(script).href);
+const r = active(root, { now: Date.now() });
+console.log(JSON.stringify({ slug: r.slug, stats: n }));
+`;
+
+test('active() stats at most the name cap of names in an over-cap run folder', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  mkRun(work, 'P20260109.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
+  const dir = path.join(work, 'P20260109.000001', '01-fix');
+  fillers(dir, CAP + 500);
+  fs.writeFileSync(path.join(dir, '99-qa.md'), stepFile(99, 'qa'));
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', CAP_CHILD, root, dir, path.join(here, 'run-state.mjs')], { encoding: 'utf8', timeout: 120000 });
+  assert.equal(r.status, 0, r.stderr);
+  const m = JSON.parse(r.stdout.trim().split('\n').pop());
+  assert.equal(m.slug, 'P20260109.000001/01-fix');
+  // CAP names plus the state-file prefilter stat and slack; an uncapped walk is 1600+.
+  assert.ok(m.stats <= CAP + 10, `active() made ${m.stats} stat calls inside the folder; cap ${CAP} (+10)`);
+  assert.ok(m.stats >= 100, `counter saw only ${m.stats} stat calls: the probe is not measuring the folder walk`);
+});
+
+test('active() keeps the numerically newest 3-digit Step when Step files exceed the name cap (R-14)', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  const slug = mkRun(work, 'P20260110.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
+  const dir = path.join(work, 'P20260110.000001', '01-fix');
+  const old = (now - 20 * HOUR) / 1000;
+  // Steps 10..100 x 12 roles = 1092 Step files (> CAP). Lexicographic order ranks 99-* above 100-*, so a
+  // lexicographic keep-1000 drops every 100-* file; numeric order keeps 100 first.
+  for (let n = 10; n <= 100; n++) {
+    for (let r = 1; r <= 12; r++) {
+      const f = path.join(dir, `${n}-r${String(r).padStart(2, '0')}.md`);
+      fs.writeFileSync(f, stepFile(n, 'qa'));
+      fs.utimesSync(f, old, old);
+    }
+  }
+  fs.utimesSync(path.join(dir, '100-r01.md'), now / 1000, now / 1000); // the only fresh file
   assert.equal(active(root, { now })?.slug, slug);
 });
