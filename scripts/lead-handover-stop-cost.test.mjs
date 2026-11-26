@@ -17,6 +17,8 @@ const STEPS_PER_RUN = 12;
 // Files the hook may open under .company/work: the active run's own files plus a small allowance. Far below
 // OLD_RUNS * (STEPS_PER_RUN + 1) = 1560, which is what the unfixed code opens.
 const OPEN_BUDGET = 40;
+// Stat calls: about 7 per run (runSlugs folder checks, state file, folder mtime); far below the 2400+ of a full walk.
+const STAT_BUDGET = OLD_RUNS * 8;
 
 const tmps = [];
 after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
@@ -24,7 +26,7 @@ after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true 
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const HOUR = 3600 * 1000;
 
-function stepFile(n, role, atMs) {
+function stepFile(n, role) {
   return `---\nstep: ${String(n).padStart(2, '0')}\nrole: ${role}\ntask: t\nstatus: done\nround: 0\nrisk-tier: medium\n---\nBy: ${role}\n## Did\n- x\n`;
 }
 
@@ -49,6 +51,7 @@ function fixture({ live }) {
       fs.writeFileSync(f, stepFile(s, 'qa', old));
       fs.utimesSync(f, old / 1000, old / 1000);
     }
+    fs.utimesSync(dir, old / 1000, old / 1000); // the folder mtime moves on file creation: age it too
   }
   if (live) {
     const dir = path.join(work, 'P20261126.000001', '01-fix');
@@ -67,16 +70,20 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { syncBuiltinESMExports } from 'node:module';
 const [work, payload, root, claudeDir, script] = process.argv.slice(1);
-const seen = new Set(); let calls = 0;
+const seen = new Set(); let calls = 0; let stats = 0;
 for (const name of ['openSync', 'readFileSync', 'opendirSync']) {
   const orig = fs[name];
   fs[name] = function (p, ...rest) { if (typeof p === 'string' && p.startsWith(work)) { calls++; seen.add(p); } return orig.call(this, p, ...rest); };
+}
+for (const name of ['lstatSync', 'statSync']) {
+  const orig = fs[name];
+  fs[name] = function (p, ...rest) { if (typeof p === 'string' && p.startsWith(work)) stats++; return orig.call(this, p, ...rest); };
 }
 syncBuiltinESMExports();
 const { measure } = await import(pathToFileURL(script).href);
 const t0 = performance.now();
 measure(payload, { root, claudeDir, env: {} });
-console.log(JSON.stringify({ calls, files: seen.size, ms: Math.round(performance.now() - t0) }));
+console.log(JSON.stringify({ calls, stats, files: seen.size, ms: Math.round(performance.now() - t0) }));
 `;
 
 function run(fx) {
@@ -98,4 +105,59 @@ test('Stop measure with no live run opens a bounded number of files, not every o
   const fx = fixture({ live: false });
   const m = run(fx);
   assert.ok(m.calls <= OPEN_BUDGET, `measure opened ${m.calls} files (${m.files} distinct) with ${OLD_RUNS} stale runs and no live run; budget ${OPEN_BUDGET} (took ${m.ms} ms)`);
+  // Idle runs cost O(1) stats: the unfixed walk does OLD_RUNS * (STEPS_PER_RUN + 1) = 1560 or more.
+  assert.ok(m.stats <= STAT_BUDGET, `measure made ${m.stats} stat calls with ${OLD_RUNS} stale runs; budget ${STAT_BUDGET}`);
+});
+
+// Edge coverage for the stat-only prefilter in run-state active(): it must never hide a run that is really active.
+import { active } from './run-state.mjs';
+
+function mkRun(work, id, { recAt, rsMtime, step }) {
+  const dir = path.join(work, id, '01-fix');
+  fs.mkdirSync(dir, { recursive: true });
+  const rs = path.join(dir, 'run-state.jsonl');
+  fs.writeFileSync(rs, `${JSON.stringify({ v: 1, at: iso(recAt), ev: 'start' })}\n`);
+  fs.utimesSync(rs, rsMtime / 1000, rsMtime / 1000);
+  if (step !== undefined) {
+    const f = path.join(dir, '01-qa.md');
+    fs.writeFileSync(f, stepFile(1, 'qa', step));
+    fs.utimesSync(f, step / 1000, step / 1000);
+  }
+  return `${id}/01-fix`;
+}
+
+function root2() {
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'stop-edge-')));
+  tmps.push(base);
+  return { root: base, work: path.join(base, '.company', 'work') };
+}
+
+test('active() still finds a recently active run with an old-named id', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  const slug = mkRun(work, 'P20260101.000001', { recAt: now - 60000, rsMtime: now - 60000 });
+  assert.equal(active(root, { now })?.slug, slug);
+});
+
+test('active() still finds a run whose state file is old but a Step file is fresh', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  const slug = mkRun(work, 'P20260102.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR, step: now - 60000 });
+  assert.equal(active(root, { now })?.slug, slug);
+});
+
+test('active() picks the most recently active run among old-named and new-named runs', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  mkRun(work, 'P20260103.000001', { recAt: now - 3000, rsMtime: now - 3000 });
+  mkRun(work, 'P20261126.000009', { recAt: now - 5 * HOUR, rsMtime: now - 5 * HOUR });
+  mkRun(work, 'P20260104.000001', { recAt: now - 40 * HOUR, rsMtime: now - 40 * HOUR });
+  assert.equal(active(root, { now })?.slug, 'P20260103.000001/01-fix');
+});
+
+test('active() returns null when every run is older than the stale window', () => {
+  const { root, work } = root2();
+  const now = Date.now();
+  mkRun(work, 'P20260105.000001', { recAt: now - 30 * HOUR, rsMtime: now - 30 * HOUR, step: now - 30 * HOUR });
+  assert.equal(active(root, { now }).slug, null);
 });

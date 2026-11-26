@@ -350,28 +350,35 @@ export function runSlugs(root, { max = MAX_FOLDERS } = {}) {
   return out;
 }
 
-// Newest mtime (ms) among the run's folder files (stat only, no file is opened), at least `floor`.
-function newestMtime(root, slug, floor) {
-  const dir = join(root, '.company', 'work', ...slug.split('/'));
-  let newest = floor;
+// Newest mtime (ms) of every file in a run folder and of its Step files (stat only, no file is opened, no name cap).
+function folderMtimes(dir) {
   let names;
-  try { names = readdirSync(dir).slice(0, 1000); } catch { return newest; }
+  try { names = readdirSync(dir); } catch { return null; }
+  let newest = 0;
+  let newestStep = 0;
   for (const name of names) {
     const st = lstatOrNull(join(dir, name));
-    if (st && st.isFile()) newest = Math.max(newest, st.mtimeMs);
+    if (!st || !st.isFile()) continue;
+    newest = Math.max(newest, st.mtimeMs);
+    if (STEP_FILE_RE.test(name) && !name.startsWith('00-')) newestStep = Math.max(newestStep, st.mtimeMs);
   }
-  return newest;
+  return { names, newest, newestStep };
 }
 
-export function active(root,{ now = Date.now() } = {}) {
+export function active(root, { now = Date.now() } = {}) {
   let best = null;
   for (const slug of runSlugs(root).slugs) {
-    const f = lstatOrNull(join(root, '.company', 'work', ...slug.split('/'), 'run-state.jsonl'));
+    const dir = join(root, '.company', 'work', ...slug.split('/'));
+    const f = lstatOrNull(join(dir, 'run-state.jsonl'));
     if (!f || !f.isFile()) continue;
-    // Stat-only prefilter: a run whose state file and every file in its folder are older than the stale window
-    // cannot be 'running' (activity comes from record times, which are written with the file, and Step mtimes).
-    // Skipping it avoids reading all its records and Step files, so the cost no longer grows with the run history.
-    if (now - newestMtime(root, slug, f.mtimeMs) > STALE_MS) continue;
+    // An idle run costs two stats: the state file and the folder itself (its mtime moves when a file is added or
+    // removed). Only a run with one of them inside the stale window has its files walked and its records read.
+    if (now - f.mtimeMs > STALE_MS) {
+      const d = lstatOrNull(dir);
+      if (!d || now - d.mtimeMs > STALE_MS) continue;
+      const m = folderMtimes(dir);
+      if (!m || now - Math.max(f.mtimeMs, m.newest) > STALE_MS) continue;
+    }
     const { view, activity } = load(root, slug, now);
     if (view.state !== 'running') continue;
     if (!best || activity > best.activity) best = { slug, view, activity };
@@ -404,16 +411,9 @@ function runActivity(root, parts, now) {
   const dir = join(root, '.company', 'work', ...parts);
   const dst = lstatOrNull(dir);
   if (!dst || !dst.isDirectory() || !insideWork(root, parts)) return 0;
-  let names;
-  try { names = readdirSync(dir).slice(0, 1000); } catch { return 0; }
-  let newest = 0;
-  let newestStep = 0;
-  for (const name of names) {
-    const st = lstatOrNull(join(dir, name));
-    if (!st || !st.isFile()) continue;
-    newest = Math.max(newest, st.mtimeMs);
-    if (STEP_FILE_RE.test(name) && !name.startsWith('00-')) newestStep = Math.max(newestStep, st.mtimeMs);
-  }
+  const m = folderMtimes(dir);
+  if (!m) return 0;
+  const { names, newest, newestStep } = m;
   if (!names.includes('run-state.jsonl')) return now - newest <= STALE_MS ? newest : 0;
   const rec = readRecords(join(dir, 'run-state.jsonl'), true);
   if (rec.unreadable) return 0;
