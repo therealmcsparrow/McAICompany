@@ -350,11 +350,28 @@ export function runSlugs(root, { max = MAX_FOLDERS } = {}) {
   return out;
 }
 
-export function active(root, { now = Date.now() } = {}) {
+// Newest mtime (ms) among the run's folder files (stat only, no file is opened), at least `floor`.
+function newestMtime(root, slug, floor) {
+  const dir = join(root, '.company', 'work', ...slug.split('/'));
+  let newest = floor;
+  let names;
+  try { names = readdirSync(dir).slice(0, 1000); } catch { return newest; }
+  for (const name of names) {
+    const st = lstatOrNull(join(dir, name));
+    if (st && st.isFile()) newest = Math.max(newest, st.mtimeMs);
+  }
+  return newest;
+}
+
+export function active(root,{ now = Date.now() } = {}) {
   let best = null;
   for (const slug of runSlugs(root).slugs) {
     const f = lstatOrNull(join(root, '.company', 'work', ...slug.split('/'), 'run-state.jsonl'));
     if (!f || !f.isFile()) continue;
+    // Stat-only prefilter: a run whose state file and every file in its folder are older than the stale window
+    // cannot be 'running' (activity comes from record times, which are written with the file, and Step mtimes).
+    // Skipping it avoids reading all its records and Step files, so the cost no longer grows with the run history.
+    if (now - newestMtime(root, slug, f.mtimeMs) > STALE_MS) continue;
     const { view, activity } = load(root, slug, now);
     if (view.state !== 'running') continue;
     if (!best || activity > best.activity) best = { slug, view, activity };
