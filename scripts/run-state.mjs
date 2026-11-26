@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v3.1). Also keeps the triage record (direct route, and the low-risk fix route):
+// Records a run's wave, Gates and end and prints the run view (contract: docs/contracts/run-state.md v3.2). Also keeps the triage record (direct route, and the low-risk fix route):
 // `triage issue` and `triage check` write hashes and times only to .company/triage.
 // `ask` marks a Gate form about to be shown; the view's `wait` on a Gate entry is the whole seconds from the latest `ask` of that
 // Gate, after the previous entry of that Gate (or the segment start), to the entry; null without one or when negative.
@@ -350,11 +350,47 @@ export function runSlugs(root, { max = MAX_FOLDERS } = {}) {
   return out;
 }
 
+// Newest mtime (ms) of the files in a run folder and of its Step files (stat only, no file is opened). At most
+// MAX_NAMES names are statted: run-state.jsonl and Step files first (highest Step number first), so a huge folder
+// cannot slow the hook and a fresh Step past the cap cannot hide.
+const MAX_NAMES = 1000;
+function folderMtimes(dir) {
+  let names;
+  try { names = readdirSync(dir); } catch { return null; }
+  if (names.length > MAX_NAMES) {
+    const key = n => n === 'run-state.jsonl' || STEP_FILE_RE.test(n);
+    const stepCmp = (a, b) => parseInt(b, 10) - parseInt(a, 10) || (a < b ? 1 : a > b ? -1 : 0);
+    names = [
+      ...names.filter(n => n === 'run-state.jsonl'),
+      ...names.filter(n => n !== 'run-state.jsonl' && STEP_FILE_RE.test(n)).sort(stepCmp),
+      ...names.filter(n => !key(n)),
+    ].slice(0, MAX_NAMES);
+  }
+  let newest = 0;
+  let newestStep = 0;
+  for (const name of names) {
+    const st = lstatOrNull(join(dir, name));
+    if (!st || !st.isFile()) continue;
+    newest = Math.max(newest, st.mtimeMs);
+    if (STEP_FILE_RE.test(name) && !name.startsWith('00-')) newestStep = Math.max(newestStep, st.mtimeMs);
+  }
+  return { names, newest, newestStep };
+}
+
 export function active(root, { now = Date.now() } = {}) {
   let best = null;
   for (const slug of runSlugs(root).slugs) {
-    const f = lstatOrNull(join(root, '.company', 'work', ...slug.split('/'), 'run-state.jsonl'));
+    const dir = join(root, '.company', 'work', ...slug.split('/'));
+    const f = lstatOrNull(join(dir, 'run-state.jsonl'));
     if (!f || !f.isFile()) continue;
+    // An idle run costs two stats: the state file and the folder itself (its mtime moves when a file is added or
+    // removed). Only a run with one of them inside the stale window has its files walked and its records read.
+    if (now - f.mtimeMs > STALE_MS) {
+      const d = lstatOrNull(dir);
+      if (!d || now - d.mtimeMs > STALE_MS) continue;
+      const m = folderMtimes(dir);
+      if (!m || now - Math.max(f.mtimeMs, m.newest) > STALE_MS) continue;
+    }
     const { view, activity } = load(root, slug, now);
     if (view.state !== 'running') continue;
     if (!best || activity > best.activity) best = { slug, view, activity };
@@ -387,16 +423,9 @@ function runActivity(root, parts, now) {
   const dir = join(root, '.company', 'work', ...parts);
   const dst = lstatOrNull(dir);
   if (!dst || !dst.isDirectory() || !insideWork(root, parts)) return 0;
-  let names;
-  try { names = readdirSync(dir).slice(0, 1000); } catch { return 0; }
-  let newest = 0;
-  let newestStep = 0;
-  for (const name of names) {
-    const st = lstatOrNull(join(dir, name));
-    if (!st || !st.isFile()) continue;
-    newest = Math.max(newest, st.mtimeMs);
-    if (STEP_FILE_RE.test(name) && !name.startsWith('00-')) newestStep = Math.max(newestStep, st.mtimeMs);
-  }
+  const m = folderMtimes(dir);
+  if (!m) return 0;
+  const { names, newest, newestStep } = m;
   if (!names.includes('run-state.jsonl')) return now - newest <= STALE_MS ? newest : 0;
   const rec = readRecords(join(dir, 'run-state.jsonl'), true);
   if (rec.unreadable) return 0;
