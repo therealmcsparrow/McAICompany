@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.47.0] - 2026-11-26
+
+Rollback: node scripts/stable.mjs 0.46.1
+
 ### Added
 - **Optional Handoff fields** (contract handoff v3.1): `tests:`, `closes:`, `open:` and `next-step: <role id> — <goal>` (or `none`). `handoff-lint` checks their shape and warns when `next-step:` names a different Role than the first `## Next` bullet.
 - **`step-close` passes lint warnings through** (contract step-close v1.3), so the Lead sees them even when the lint passes.
