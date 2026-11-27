@@ -22,7 +22,7 @@ const OPEN_BUDGET = 40;
 const STAT_BUDGET = OLD_RUNS * 8;
 
 const tmps = [];
-after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
+after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const HOUR = 3600 * 1000;
@@ -219,6 +219,12 @@ const r = active(root, { now: Date.now() });
 console.log(JSON.stringify({ slug: r.slug, stats: n }));
 `;
 
+const statsOf = (root, dir) => {
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', CAP_CHILD, root, dir, path.join(here, 'run-state.mjs')], { encoding: 'utf8', timeout: 120000 });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout.trim().split('\n').pop());
+};
+
 test('active() stats at most the name cap of names in an over-cap run folder', () => {
   const { root, work } = root2();
   const now = Date.now();
@@ -226,16 +232,14 @@ test('active() stats at most the name cap of names in an over-cap run folder', (
   const dir = path.join(work, 'P20260109.000001', '01-fix');
   fillers(dir, CAP + 500);
   fs.writeFileSync(path.join(dir, '99-qa.md'), stepFile(99, 'qa'));
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', CAP_CHILD, root, dir, path.join(here, 'run-state.mjs')], { encoding: 'utf8', timeout: 120000 });
-  assert.equal(r.status, 0, r.stderr);
-  const m = JSON.parse(r.stdout.trim().split('\n').pop());
+  const m = statsOf(root, dir);
   assert.equal(m.slug, 'P20260109.000001/01-fix');
   // CAP names plus the state-file prefilter stat and slack; an uncapped walk is 1600+.
   assert.ok(m.stats <= CAP + 10, `active() made ${m.stats} stat calls inside the folder; cap ${CAP} (+10)`);
   assert.ok(m.stats >= 100, `counter saw only ${m.stats} stat calls: the probe is not measuring the folder walk`);
 });
 
-test('active() keeps the numerically newest 3-digit Step when Step files exceed the name cap (R-14)', () => {
+test('active() keeps the numerically newest 3-digit Step when Step files exceed the name cap', () => {
   const { root, work } = root2();
   const now = Date.now();
   const slug = mkRun(work, 'P20260110.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
@@ -252,4 +256,48 @@ test('active() keeps the numerically newest 3-digit Step when Step files exceed 
   }
   fs.utimesSync(path.join(dir, '100-r01.md'), now / 1000, now / 1000); // the only fresh file
   assert.equal(active(root, { now })?.slug, slug);
+});
+
+// Helper: a run whose state file is aged 20h, with `steps` aged Step files (NN-role.md) in its 01-fix folder.
+function oldStepRun(id, steps) {
+  const { root, work } = root2();
+  const now = Date.now();
+  mkRun(work, id, { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
+  const dir = path.join(work, id, '01-fix');
+  const old = (now - 20 * HOUR) / 1000;
+  // Real Step names (NN-role.md, 2 or 3 digits): Steps 10..93 x 12 roles (1000 files: Step 93 has 4).
+  for (let i = 0; i < steps; i++) {
+    const n = 10 + Math.floor(i / 12);
+    const f = path.join(dir, `${n}-r${String(i % 12 + 1).padStart(2, '0')}.md`);
+    fs.writeFileSync(f, stepFile(n, 'qa'));
+    fs.utimesSync(f, old, old);
+  }
+  return { root, dir, old };
+}
+
+// The state file decides first: a stale state file in a stale folder ends the check with no walk over the Step
+// files, however many there are. Asserted by outcome and by stat calls inside the folder (not wall-clock time).
+test('active() decides from run-state.jsonl and does no per-file stat over 1000 Step files', () => {
+  const { root, dir, old } = oldStepRun('P20260111.000001', 1000);
+  fs.utimesSync(dir, old, old); // folder aged like the state file: the cheap checks decide
+  const m = statsOf(root, dir);
+  assert.equal(m.slug, null);
+  assert.ok(m.stats <= 5, `active() made ${m.stats} stat calls inside the folder; the state file alone should decide`);
+});
+
+test('active() keeps a run active when only run-state.jsonl is fresh: aged folder, 1000 aged Step files', () => {
+  const { root, dir, old } = oldStepRun('P20260113.000001', 1000);
+  const now = Date.now();
+  const rs = path.join(dir, 'run-state.jsonl');
+  fs.writeFileSync(rs, `${JSON.stringify({ v: 1, at: iso(now - 60000), ev: 'start' })}\n`);
+  fs.utimesSync(rs, (now - 60000) / 1000, (now - 60000) / 1000);
+  fs.utimesSync(dir, old, old); // appending a record does not move the folder mtime: only the state file is fresh
+  assert.equal(active(root, { now })?.slug, 'P20260113.000001/01-fix');
+});
+
+test('active() probe sees the Step-file walk when the folder is fresh over 1000 Step files', () => {
+  const { root, dir } = oldStepRun('P20260112.000001', 1000); // folder mtime is fresh from file creation
+  const m = statsOf(root, dir);
+  assert.equal(m.slug, null); // every file is stale: still idle, but only after the walk
+  assert.ok(m.stats >= 900, `counter saw only ${m.stats} stat calls: the probe is not measuring the folder walk`);
 });
