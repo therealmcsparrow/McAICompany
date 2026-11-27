@@ -28,7 +28,7 @@ test('gates.md: request wording (merge/release/"after CI green") never counts as
 test('pipeline SKILL §6: merge needs the recorded Ship Gate pass, not only green CI', () => {
   assert.ok(shipSentence, 'merge sentence missing');
   assert.match(shipSentence, /ship gate[^.]*(passed|recorded)/i, 'the merge sentence must require the Ship Gate pass');
-  assert.match(shipSentence, /run-state gate <slug> ship passed/, 'the merge sentence must name the recorded `ship passed`');
+  assert.match(shipSentence, /run-state gate '<slug>' ship passed/, 'the merge sentence must name the recorded `ship passed`');
 });
 
 test('pipeline SKILL §6: the same rule covers tag push and release', () => {
@@ -40,8 +40,8 @@ test('pipeline SKILL §6: a merged PR also needs green CI', () => {
   assert.match(shipSentence, /green CI|CI[^.]*green/i);
 });
 
-test('pipeline SKILL §6: the Lead checks run-state show for the ship pass before merge', () => {
-  assert.match(pipeline, /Right before[^.]*run-state show\b[^.]*ship pass/i);
+test('pipeline SKILL §6: the Lead checks that the latest ship gate entry is passed before merge', () => {
+  assert.match(pipeline, /Right before[^.]*run-state show\b[^.]*latest `ship` gate entry must be `passed`/i);
 });
 
 test('gates.md: an auto Ship Gate never merges, tags or releases', () => {
@@ -58,7 +58,8 @@ test('lead SKILL: the approval rule names the Ship Gate and release/merge reques
   assert.ok(ruleLine(lead), 'lead SKILL has no line saying a release/merge request never approves the Ship Gate');
 });
 
-test('gates.md: a release/merge request still gets the Ship Gate form before merge, tag, release', () => {
-  assert.match(gates, /(release|tag)[^\n]*(always|still)[^\n]*form|form[^\n]*(release|tag)[^\n]*(always|still)/i,
-    'gates.md must say release/tag requests still ask the Ship Gate form');
+test('gates.md: the Always-a-form line itself says merge, tag or release always ask', () => {
+  const l = gates.split('\n').find((x) => /Always a form/i.test(x));
+  assert.ok(l, 'Always-a-form line missing');
+  assert.match(l, /\bmerge, tag or release\b[^.]*\balways ask\b/i, 'the Always-a-form line must say merge, tag or release always ask');
 });
