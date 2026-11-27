@@ -38,4 +38,4 @@ Every Step whose Handoff feeds the Ship Gate (the last review, QA and security H
 ## 6. Merge and nit Fix Step
 - The only merge is `code-reviewer` with `qa` on size S: one `code-reviewer` Step does the QA verify and the review checklist. A QA test-first Step is never merged. `next` answers `split` on `contract_changed`, missing facts or an earlier `needs-ceo` Handoff.
 - A merged Step is one Step: one Goal, one Handoff, the run's context cap and hand-over, counted once.
-- A nit on a Contract or Core path gets one builder Fix Step: `route.mjs fix '<slug>' '<role>' '<why>'`. It is not a Fix round, does not count toward the Fix-round limit or the budget, and its own nits never loop.
+- Open nits after the last clean review get one builder nit Fix Step, all nits in one Goal: `route.mjs fix '<slug>' '<role>' '<why>'`. It is not a Fix round, does not count toward the Fix-round limit or the budget, gets no re-review round, and its own nits never loop: what is left goes to `## Debt` with no form (`references/fix-rounds.md`).
