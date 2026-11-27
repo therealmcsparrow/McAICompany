@@ -39,4 +39,4 @@ Brief, Plan and Ship each stop for the CEO and are never skipped. Load `referenc
 Blocking items from a reviewer, QA, Security or the Senior Engineer start a Fix round. Load `references/fix-rounds.md` on the first Blocking item: the round, the tags, the limit `pipeline.fix_rounds`, the escalation form past it, the stale-test Debt rule.
 
 ## 6. Finish
-Before the Ship Gate run `ship-check`, then the full test suite once; after the Gate is approved run the writes in `references/gates.md`, After the Ship Gate is approved. The Lead merges a PR only after the Ship Gate passed (`run-state gate <slug> ship passed` recorded) and CI on it is green.
+Before the Ship Gate run `ship-check`, then the full test suite once; after the Gate is approved run the writes in `references/gates.md`, After the Ship Gate is approved. The Lead merges a PR, pushes a tag or cuts a release only after the Ship Gate passed (`run-state gate <slug> ship passed` recorded), and a merged PR also needs green CI on it. Right before, check `run-state show '<slug>' --json` for the recorded ship pass.
