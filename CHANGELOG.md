@@ -4,6 +4,14 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.47.3] - 2026-11-27
+
+Rollback: node scripts/stable.mjs 0.47.2
+
+### Fixed
+- Ship Gate is never approved by wording in the request: only the CEO's own approval counts. PR #114.
+- Tests: retry temp dir cleanup (RM_OPTS in harness and exit sweep) to stop Windows flakes, plus review follow-ups R-1 and R-2. PR #115.
+
 ## [0.47.2] - 2026-11-27
 
 Rollback: node scripts/stable.mjs 0.47.1
