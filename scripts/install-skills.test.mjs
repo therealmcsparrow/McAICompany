@@ -14,7 +14,7 @@ const RM_OPTS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }
 // Remove the temp dirs this file made, once the run is over.
 const __tmpDirs = [];
 const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
-process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
+process.on('exit', () => { for (const d of __tmpDirs) { try { __rmTree(d, RM_OPTS); } catch { /* best effort */ } } });
 
 const TODAY = new Date('2026-10-22T12:00:00Z');
 const manifest = {
