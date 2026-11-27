@@ -28,13 +28,16 @@ const AGENTS = {
   security: { model: 'opus', effort: 'xhigh', name: 'Sam' }
 };
 
+// Windows can hold a handle briefly after a child exits (EPERM/EBUSY); Node retries those.
+const RM_OPTS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 };
+
 function agentFile(role, { model, effort }) {
   return ['---', `name: ${role}`, `description: The ${role}.`, 'tools: Read', `model: ${model}`, `effort: ${effort}`, '---', `# ${role}`, ''].join('\n');
 }
 
 function sandbox(t, { company = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'settings-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(root, RM_OPTS));
   const home = path.join(root, 'home');
   const cwd = path.join(root, 'repo');
   const pluginRoot = path.join(root, 'plugin');
@@ -1703,7 +1706,7 @@ test('model-env: a value outside the allow-list prints as (hidden)', () => {
 // A directory holding a fake claude on the search path; the exec stub is injected, so nothing runs.
 function pathWith(t, ...extra) {
   const bin = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'claude-bin-')));
-  t.after(() => fs.rmSync(bin, { recursive: true, force: true }));
+  t.after(() => fs.rmSync(bin, RM_OPTS));
   const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
   fs.writeFileSync(path.join(bin, name), 'x', { mode: 0o755 });
   return { bin, file: path.join(bin, name), PATH: [bin, ...extra].join(path.delimiter) };
