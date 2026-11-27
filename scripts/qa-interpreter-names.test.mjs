@@ -7,6 +7,8 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from '
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+// Windows can hold a handle briefly after a child exits (EPERM/EBUSY); Node retries those.
+const RM_OPTS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }
 const root = join(import.meta.dirname, '..')
 const json = (p) => JSON.parse(readFileSync(join(root, p), 'utf8'))
 
@@ -45,7 +47,7 @@ test('win32 probe: direct spawn of `node` is no guard; only ND=1 in the parent s
     assert.ok(!run('1').startsWith(dir.toLowerCase()), 'ND=1 in the parent must stop the cwd lookup')
     // Hazard: without ND=1 in the parent, the cwd copy wins even for a direct spawn.
     assert.ok(run(undefined).startsWith(dir.toLowerCase()), 'without ND=1 a direct spawn picks the cwd node.exe')
-  } finally { rmSync(dir, { recursive: true, force: true }) }
+  } finally { rmSync(dir, RM_OPTS) }
 })
 
 test('win32 probe: cmd.exe honours NoDefaultCurrentDirectoryInExePath=1', { skip: process.platform !== 'win32' }, () => {
@@ -61,5 +63,5 @@ test('win32 probe: cmd.exe honours NoDefaultCurrentDirectoryInExePath=1', { skip
     assert.ok(!run(true).includes('HIJACK'), 'ND=1 must stop the cwd lookup')
     // Documents the underlying hazard so the guard above is not vacuous.
     assert.ok(run(false).includes('HIJACK'), 'without ND=1 cmd.exe runs node.cmd from the cwd')
-  } finally { rmSync(dir, { recursive: true, force: true }) }
+  } finally { rmSync(dir, RM_OPTS) }
 })

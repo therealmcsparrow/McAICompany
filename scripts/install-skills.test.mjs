@@ -9,6 +9,8 @@ import { join, resolve, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plan, runAll, expand, missing, parseDesignSkills, main, retiredSkills, manifestFromBaseline, skillsEnv, cleanPath, installExec } from './install-skills.mjs';
 import { readBaseline, boundedFolderHash as boundedFolderHashOf } from './skill-catalog.mjs';
+// Windows can hold a handle briefly after a child exits (EPERM/EBUSY); Node retries those.
+const RM_OPTS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 };
 // Remove the temp dirs this file made, once the run is over.
 const __tmpDirs = [];
 const mkdtempSync = (...a) => { const d = __mkdtemp(...a); __tmpDirs.push(d); return d; };
@@ -47,7 +49,7 @@ function sandbox() {
     const code = main(args, { manifest, home, cwd: base, today: TODAY, platform: 'linux', log: s => out.push(s), exec: (c, cwd) => calls.push([c, cwd]), ...extra });
     return { code, out: out.join('\n'), calls };
   };
-  return { base, root, projectFile, run, done: () => rmSync(base, { recursive: true, force: true }) };
+  return { base, root, projectFile, run, done: () => rmSync(base, RM_OPTS) };
 }
 
 test('hostile: error never echoes the text, even in parseDesignSkills', () => {
@@ -247,7 +249,7 @@ function retiredSandbox() {
     const code = main(args, { manifest: man, home, releasesDir, platform: 'win32', log: s => out.push(s), exec: (c, cwd, argv) => calls.push([c, cwd, argv]), ...extra });
     return { code, out: out.join('\n'), lines: [...out] };
   };
-  return { base, home, releasesDir, skills, sbom, run, calls, man, done: () => rmSync(base, { recursive: true, force: true }) };
+  return { base, home, releasesDir, skills, sbom, run, calls, man, done: () => rmSync(base, RM_OPTS) };
 }
 const REMOVE_CMD = 'npx -y skills@1.7.4 remove oldskill -g -a claude-code -y';
 

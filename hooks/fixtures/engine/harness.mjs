@@ -25,7 +25,7 @@ const writeJson = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true })
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 
 const bases = [];
-export function cleanup() { for (const b of bases.splice(0)) fs.rmSync(b, { recursive: true, force: true }); }
+export function cleanup() { for (const b of bases.splice(0)) fs.rmSync(b, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 
 // One template per test file; each case copies it.
 let template = null;

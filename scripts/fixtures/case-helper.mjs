@@ -10,11 +10,13 @@ export const WRONG = 'wrong letter case';
 export const SCRIPTS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PLUGIN = path.resolve(SCRIPTS, '..');
 
+// Windows can hold a handle briefly after a child exits (EPERM/EBUSY); Node retries those.
+const RM_OPTS = { recursive: true, force: true, maxRetries: 5, retryDelay: 100 };
 const made = [];
 export function cleanup() {
   for (const d of made) {
-    fs.rmSync(d, { recursive: true, force: true });
-    fs.rmSync(`${d}.aico-wt`, { recursive: true, force: true });
+    fs.rmSync(d, RM_OPTS);
+    fs.rmSync(`${d}.aico-wt`, RM_OPTS);
   }
 }
 
