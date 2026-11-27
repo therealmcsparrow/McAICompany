@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.47.2] - 2026-11-27
+
+Rollback: node scripts/stable.mjs 0.47.1
+
+### Changed
+- Tests only: pin the run-state active-run prefilter over 1000 Step files and fresh-state edge cases in the Stop hook cost test (R-15), plus review nits R-3 to R-7. PR #112.
+
 ## [0.47.1] - 2026-11-27
 
 Rollback: node scripts/stable.mjs 0.47.0
