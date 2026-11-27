@@ -1,6 +1,5 @@
-// Regression: the Lead skipped the Ship Gate form on the v0.47.2 release run (P20261127, PR #112 via PR #113). It read the
-// request "merge after all CI green incl. Windows" as the approval. A request's words never count as Ship Gate approval:
-// merge, tag and release always wait for the Ship Gate form and a recorded `run-state gate <slug> ship passed`.
+// A request's words never count as Ship Gate approval: merge, tag and release always wait for the Ship Gate form
+// and a recorded `run-state gate <slug> ship passed`.
 // Text pins on the docs the Lead reads: the rule must be named where the merge/release step is described.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,20 +13,45 @@ const gates = read('skills', 'pipeline', 'references', 'gates.md');
 const pipeline = read('skills', 'pipeline', 'SKILL.md');
 const lead = read('skills', 'lead', 'SKILL.md');
 
-// A single sentence/line that mentions the request wording, says it never approves, and ties it to the Ship Gate.
+// A single line that mentions the request wording, says it never approves, and ties it to the Ship Gate.
 const ruleLine = (text) => text.split('\n').find((l) =>
-  /request/i.test(l) && /(merge|release|tag)/i.test(l) && /ship gate/i.test(l) && /(never|not|no)\b[^.]*\b(approv|count)/i.test(l)
+  /request/i.test(l) && /\b(merge|release|tag)\b/i.test(l) && /ship gate/i.test(l) && /(never|not|no)\b[^.]*\b(approv|count)/i.test(l)
   && /(CI green|after CI|merge after|wording|words)/i.test(l));
+
+// The §6 ship sentence itself, up to its full stop (not the whole line, which names the Ship Gate elsewhere).
+const shipSentence = (pipeline.match(/The Lead merges a PR[^.]*\./) || [''])[0];
 
 test('gates.md: request wording (merge/release/"after CI green") never counts as Ship Gate approval', () => {
   assert.ok(ruleLine(gates), 'gates.md has no line saying a request to merge/release (e.g. "merge after CI green") is not Ship Gate approval');
 });
 
 test('pipeline SKILL §6: merge needs the recorded Ship Gate pass, not only green CI', () => {
-  const l = pipeline.split('\n').find((x) => /merges a PR/i.test(x));
-  assert.ok(l, 'merge sentence missing');
-  assert.match(l, /ship gate/i, 'the merge sentence must also require the Ship Gate');
-  assert.match(l, /gate\W+\w*\W*ship passed|recorded|passed/i, 'the merge sentence must require a recorded pass');
+  assert.ok(shipSentence, 'merge sentence missing');
+  assert.match(shipSentence, /ship gate[^.]*(passed|recorded)/i, 'the merge sentence must require the Ship Gate pass');
+  assert.match(shipSentence, /run-state gate <slug> ship passed/, 'the merge sentence must name the recorded `ship passed`');
+});
+
+test('pipeline SKILL §6: the same rule covers tag push and release', () => {
+  assert.match(shipSentence, /\btag\b/i);
+  assert.match(shipSentence, /\brelease\b/i);
+});
+
+test('pipeline SKILL §6: a merged PR also needs green CI', () => {
+  assert.match(shipSentence, /green CI|CI[^.]*green/i);
+});
+
+test('pipeline SKILL §6: the Lead checks run-state show for the ship pass before merge', () => {
+  assert.match(pipeline, /Right before[^.]*run-state show\b[^.]*ship pass/i);
+});
+
+test('gates.md: an auto Ship Gate never merges, tags or releases', () => {
+  assert.match(gates, /auto Ship Gate[^\n]*never merges, tags or releases/i);
+});
+
+test('gates.md: merge, tag or release is in the Always-a-form list', () => {
+  const l = gates.split('\n').find((x) => /Always a form/i.test(x));
+  assert.ok(l, 'Always-a-form list missing');
+  assert.match(l, /\bmerge, tag or release\b/i);
 });
 
 test('lead SKILL: the approval rule names the Ship Gate and release/merge requests', () => {
