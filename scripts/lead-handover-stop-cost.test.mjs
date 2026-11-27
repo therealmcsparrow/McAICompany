@@ -239,7 +239,7 @@ test('active() stats at most the name cap of names in an over-cap run folder', (
   assert.ok(m.stats >= 100, `counter saw only ${m.stats} stat calls: the probe is not measuring the folder walk`);
 });
 
-test('active() keeps the numerically newest 3-digit Step when Step files exceed the name cap',() => {
+test('active() keeps the numerically newest 3-digit Step when Step files exceed the name cap', () => {
   const { root, work } = root2();
   const now = Date.now();
   const slug = mkRun(work, 'P20260110.000001', { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
@@ -285,7 +285,7 @@ test('active() decides from run-state.jsonl and does no per-file stat over 1000 
   assert.ok(m.stats <= 5, `active() made ${m.stats} stat calls inside the folder; the state file alone should decide`);
 });
 
-test('active() keeps a run active when only run-state.jsonl is fresh: aged folder, 1000 aged Step files',() => {
+test('active() keeps a run active when only run-state.jsonl is fresh: aged folder, 1000 aged Step files', () => {
   const { root, dir, old } = oldStepRun('P20260113.000001', 1000);
   const now = Date.now();
   const rs = path.join(dir, 'run-state.jsonl');
@@ -295,7 +295,7 @@ test('active() keeps a run active when only run-state.jsonl is fresh: aged folde
   assert.equal(active(root, { now })?.slug, 'P20260113.000001/01-fix');
 });
 
-test('active() probe sees the Step-file walk when the folder is fresh over 1000 Step files',() => {
+test('active() probe sees the Step-file walk when the folder is fresh over 1000 Step files', () => {
   const { root, dir } = oldStepRun('P20260112.000001', 1000); // folder mtime is fresh from file creation
   const m = statsOf(root, dir);
   assert.equal(m.slug, null); // every file is stale: still idle, but only after the walk
