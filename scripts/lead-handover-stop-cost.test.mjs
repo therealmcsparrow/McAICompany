@@ -253,3 +253,41 @@ test('active() keeps the numerically newest 3-digit Step when Step files exceed 
   fs.utimesSync(path.join(dir, '100-r01.md'), now / 1000, now / 1000); // the only fresh file
   assert.equal(active(root, { now })?.slug, slug);
 });
+
+// R-15: the state file decides first. A stale state file in a stale folder ends the check with no walk over the Step
+// files, however many there are. Asserted by outcome and by stat calls inside the folder (not wall-clock time).
+function oldStepRun(id, steps) {
+  const { root, work } = root2();
+  const now = Date.now();
+  mkRun(work, id, { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
+  const dir = path.join(work, id, '01-fix');
+  const old = (now - 20 * HOUR) / 1000;
+  // Real Step names (NN-role.md, 2 or 3 digits): Steps 10..99 x 12 roles.
+  for (let i = 0; i < steps; i++) {
+    const n = 10 + Math.floor(i / 12);
+    const f = path.join(dir, `${n}-r${String(i % 12 + 1).padStart(2, '0')}.md`);
+    fs.writeFileSync(f, stepFile(n, 'qa'));
+    fs.utimesSync(f, old, old);
+  }
+  return { root, dir, old };
+}
+const statsOf = (root, dir) => {
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', CAP_CHILD, root, dir, path.join(here, 'run-state.mjs')], { encoding: 'utf8', timeout: 120000 });
+  assert.equal(r.status, 0, r.stderr);
+  return JSON.parse(r.stdout.trim().split('\n').pop());
+};
+
+test('active() decides from run-state.jsonl and does no per-file stat over 1000 Step files (R-15)', () => {
+  const { root, dir, old } = oldStepRun('P20260111.000001', 1000);
+  fs.utimesSync(dir, old, old); // folder aged like the state file: the cheap checks decide
+  const m = statsOf(root, dir);
+  assert.equal(m.slug, null);
+  assert.ok(m.stats <= 5, `active() made ${m.stats} stat calls inside the folder; the state file alone should decide`);
+});
+
+test('active() probe sees the Step-file walk when the folder is fresh over 1000 Step files (R-15 control)', () => {
+  const { root, dir } = oldStepRun('P20260112.000001', 1000); // folder mtime is fresh from file creation
+  const m = statsOf(root, dir);
+  assert.equal(m.slug, null); // every file is stale: still idle, but only after the walk
+  assert.ok(m.stats >= 900, `counter saw only ${m.stats} stat calls: the probe is not measuring the folder walk`);
+});
