@@ -262,7 +262,7 @@ function oldStepRun(id, steps) {
   mkRun(work, id, { recAt: now - 20 * HOUR, rsMtime: now - 20 * HOUR });
   const dir = path.join(work, id, '01-fix');
   const old = (now - 20 * HOUR) / 1000;
-  // Real Step names (NN-role.md, 2 or 3 digits): Steps 10..99 x 12 roles.
+  // Real Step names (NN-role.md, 2 or 3 digits): Steps 10..93 x 12 roles (1000 files: Step 93 has 4).
   for (let i = 0; i < steps; i++) {
     const n = 10 + Math.floor(i / 12);
     const f = path.join(dir, `${n}-r${String(i % 12 + 1).padStart(2, '0')}.md`);
@@ -283,6 +283,16 @@ test('active() decides from run-state.jsonl and does no per-file stat over 1000 
   const m = statsOf(root, dir);
   assert.equal(m.slug, null);
   assert.ok(m.stats <= 5, `active() made ${m.stats} stat calls inside the folder; the state file alone should decide`);
+});
+
+test('active() keeps a run active when only run-state.jsonl is fresh: aged folder, 1000 aged Step files (R-1)', () => {
+  const { root, dir, old } = oldStepRun('P20260113.000001', 1000);
+  const now = Date.now();
+  const rs = path.join(dir, 'run-state.jsonl');
+  fs.writeFileSync(rs, `${JSON.stringify({ v: 1, at: iso(now - 60000), ev: 'start' })}\n`);
+  fs.utimesSync(rs, (now - 60000) / 1000, (now - 60000) / 1000);
+  fs.utimesSync(dir, old, old); // appending a record does not move the folder mtime: only the state file is fresh
+  assert.equal(active(root, { now })?.slug, 'P20260113.000001/01-fix');
 });
 
 test('active() probe sees the Step-file walk when the folder is fresh over 1000 Step files (R-15 control)', () => {
