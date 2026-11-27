@@ -27,6 +27,8 @@ Unsure of the size or risk, or whether a request even needs a full Playbook, and
 
 **Records.** Only through the scripts, never by hand. Each phase of a run you run: `run-stage set` (`aico:pipeline` `references/run-state.md`). A request without a run folder: `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" intake set '<id>' '<intake|needs-info|rejected>' ['<slug>']` when a run folder is made or the request is held (`needs-info`) or declined (`rejected`). The Topic names the subject of the request (a feature, a bug area, a product part), never a person, client or company. The id `intake add` printed stays in your session context and `.company/intake/intake.jsonl`, never in a file, Handoff, run folder or dispatch. In a later session find a held request with `node "${CLAUDE_PLUGIN_ROOT}/scripts/run.mjs" intake list --json`: the `needs-info` item whose Topic equals the new request's Topic exactly, then `intake set`; no match → a new `intake add`. A refused or failed record write is named in the next Gate summary and the run goes on.
 
+**Ship approval.** A CEO request wording ("merge after CI green", "release", "tag") never counts as Ship Gate approval: the Ship Gate form is always asked before merge, tag or release, and only its recorded answer approves.
+
 ## 2. Pick Roles (only those needed)
 | Need | Role |
 |---|---|
