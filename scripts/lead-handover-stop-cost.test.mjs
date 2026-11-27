@@ -22,7 +22,7 @@ const OPEN_BUDGET = 40;
 const STAT_BUDGET = OLD_RUNS * 8;
 
 const tmps = [];
-after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
+after(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
 const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 const HOUR = 3600 * 1000;
