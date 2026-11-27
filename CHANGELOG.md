@@ -4,6 +4,13 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.47.1] - 2026-11-27
+
+Rollback: node scripts/stable.mjs 0.47.0
+
+### Fixed
+- Stop hook idle run check now costs a constant amount: it skips stale runs by mtime and caps the folder stat walk (names sorted by numeric Step), so a large `.company/work` no longer slows the Stop hook. Run-state contract bumped to v3.2 (Active run prefilter). PR #110.
+
 ## [0.47.0] - 2026-11-26
 
 Rollback: node scripts/stable.mjs 0.46.1
