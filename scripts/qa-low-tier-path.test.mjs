@@ -1246,7 +1246,9 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       ['rev-parse', '--show-object-format'],
       ['rev-parse', `--disambiguate=${SHA}`],
       ['cat-file', '-t', '--end-of-options', FULL],
-      ['merge-base', '--is-ancestor', '--end-of-options', FULL, 'HEAD']
+      ['merge-base', '--is-ancestor', '--end-of-options', FULL, 'HEAD'],
+      ['cat-file', '-e', '--end-of-options', `${FULL}:.company/project.md`],
+      ['ls-files', '--others', '-z', '--', ':(glob)**/.gitignore']
     ]);
     // the setup calls come first (top level, then the grafts path), then the command's own calls
     assert.deepEqual(w.allCalls.slice(0, 2).map((c) => subOf(c.args)), [['rev-parse', '--show-toplevel'], ['rev-parse', '--git-path', 'info/grafts']]);
@@ -1278,7 +1280,9 @@ describe('Fix round 1 rules: ceo flag, resolved base, Core at the base commit, r
       ['rev-parse', '--show-object-format'],
       ['rev-parse', `--disambiguate=${FULL}`],
       ['cat-file', '-t', '--end-of-options', FULL],
-      ['merge-base', '--is-ancestor', '--end-of-options', FULL, 'HEAD']
+      ['merge-base', '--is-ancestor', '--end-of-options', FULL, 'HEAD'],
+      ['cat-file', '-e', '--end-of-options', `${FULL}:.company/project.md`],
+      ['ls-files', '--others', '-z', '--', ':(glob)**/.gitignore']
     ]);
     const tree = world(t);
     tree.repo.types[FULL] = 'tree';

@@ -43,4 +43,4 @@ Run with `aico:pipeline`. Roles and lanes run per the tier set (aico:pipeline re
 5a. `aico:product-manager`: destination spec, checked by `spec-check.mjs`, stamped after approval: `references/intake-and-ship.md`.
 5b. Ship Gate summary: the Gate items that used to show earlier are listed there: `references/intake-and-ship.md` `## Ship Gate summary`.
    **→ Ship Gate** (after tier-set.mjs sync --diff; added Roles and lanes first)
-6. `aico:devops`: release/deploy as approved.
+6. `aico:devops`: push, PR and merge once all CI is green, as the Ship Gate approved; deploy only as approved. No tag or release: that is a separate CEO-approved release run.

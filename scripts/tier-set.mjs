@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Tier sets (contract: docs/contracts/tier-sets.md v2.0). Node built-ins only.
+// Tier sets (contract: docs/contracts/tier-sets.md v2.1). Node built-ins only.
 // Picks the Roles and lanes of a feature or fix run from the plugin data file company/tier-sets.json,
 // decides the run tier and the short or full path, checks plan and diff paths for forced-high hits, and
 // keeps a per-run record in .company/work/<slug>/tier-path.jsonl. The record holds enums, integers, a sha
@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { parsePlan, normalizePath } from './plan-tasks.mjs';
@@ -297,6 +297,11 @@ function readCore(env, base) {
   } catch {
     return { unknown: true };
   }
+  return parseCore(text);
+}
+
+// The Core paths of a project.md text: { core, warning } or { unknown: true } when it has no `## Core` heading.
+function parseCore(text) {
   const lines = text.replace(/<!--[\s\S]*?(?:-->|$)/g, '').split('\n').map((l) => l.replace(/\r$/, ''));
   const start = lines.findIndex((l) => l.trimEnd() === '## Core');
   if (start === -1) return { unknown: true };
@@ -315,6 +320,76 @@ function readCore(env, base) {
     else skipped++;
   }
   return { core, warning: skipped > 0 ? `warning: ${skipped} core items are not paths, not checked` : null };
+}
+
+// ---------------------------------------------------------------- local state (v1.2)
+// A product that does not track .company/ (no `.company` entry at the base) keeps its governance files and Core list
+// only in the working copy, and a checkout may hold untracked .gitignore files that predate the run. `begin` pins both
+// with a sha256 taken before any Role runs; `sync` trusts them only when the hash is unchanged, else it fails closed.
+
+const GOV_FILES = Object.freeze(['.company/project.md', ...CORE_FIXED.filter((f) => f !== '.company/project.md')]);
+const isCompanyPath = (p) => {
+  const key = checkKey(p);
+  return key === '.company' || key.startsWith('.company/');
+};
+
+// true when .company/project.md is in the base tree, false when the base has none; throws on a git failure.
+// The blob read the Core check makes anyway comes first; only when it fails does ls-tree tell absent from broken.
+function baseHasProject(env, base) {
+  try {
+    gitRun(env, ['cat-file', '-e', '--end-of-options', `${base}:.company/project.md`]);
+    return true;
+  } catch {
+    return gitRun(env, ['ls-tree', '--name-only', '-z', '--end-of-options', base, '--', '.company/project.md'], 'diff').length > 0;
+  }
+}
+
+// Hash of files at the top level: path, then size and bytes, or `-` when absent. null on any doubt.
+// Also returns the bytes read per path, so a caller parses exactly what was hashed.
+function hashFiles(top, rels) {
+  const h = createHash('sha256');
+  const bytesOf = new Map();
+  for (const rel of rels) {
+    h.update(`${rel}\0`);
+    const file = path.join(top, rel);
+    const st = lstatOrNull(file);
+    if (!st) {
+      h.update('-\0');
+      continue;
+    }
+    if (!isPlain(st) || st.size > MAX_PROJECT_BYTES) return null;
+    const bytes = readOpened(file, st, MAX_PROJECT_BYTES);
+    if (bytes.length > MAX_PROJECT_BYTES) return null;
+    h.update(`${bytes.length}\0`);
+    h.update(bytes);
+    bytesOf.set(rel, bytes);
+  }
+  return { hex: h.digest('hex'), bytesOf };
+}
+
+// { tracked, local, gov, project }: tracked = project.md is in the base tree; local = hash of the untracked .gitignore
+// files (outside .company/ when it is untracked), only when there is one; gov = hash of project.md and CORE_FIXED in the
+// working copy, only when the base has no project.md and the working copy has one. A failure leaves a value null,
+// which the check reads as "not pinned".
+function localState(env, base) {
+  const out = { tracked: null, local: null, gov: null, project: null };
+  try {
+    const { top } = gitStart(env);
+    out.tracked = baseHasProject(env, base);
+    const ignores = gitRun(env, ['ls-files', '--others', '-z', '--', ':(glob)**/.gitignore'], 'glob').toString('utf8')
+      .split('\0').filter((p) => p !== '' && (out.tracked || !isCompanyPath(p))).sort();
+    if (ignores.length > 0) out.local = hashFiles(top, ignores)?.hex ?? null;
+    if (!out.tracked) {
+      const g = hashFiles(top, GOV_FILES);
+      if (g && g.bytesOf.has('.company/project.md')) {
+        out.gov = g.hex;
+        out.project = g.bytesOf.get('.company/project.md');
+      }
+    }
+  } catch {
+    return { tracked: out.tracked, local: null, gov: null, project: null };
+  }
+  return out;
 }
 
 function readPlanPaths(root, slug, name) {
@@ -444,22 +519,23 @@ function readDiffPaths(env, base, slug) {
   const id = branchId(slug);
   if (typeof id !== 'string' || !isBranchId(id)) return null;
   const ref = `refs/heads/aico/${id}`;
-  const all = new Set();
-  const add = (buf) => {
-    for (const p of buf.toString('utf8').split('\0')) if (p !== '') all.add(p);
+  const tracked = new Set();
+  const untracked = new Set();
+  const add = (set, buf) => {
+    for (const p of buf.toString('utf8').split('\0')) if (p !== '') set.add(p);
   };
   try {
     gitRun(env, ['cat-file', '-e', '--end-of-options', `${base}^{commit}`]);
     if (gitRun(env, ['symbolic-ref', '-q', 'HEAD']).toString('utf8') !== `${ref}\n`) return null;
     gitRun(env, ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]);
-    add(gitRun(env, [...DIFF_FLAGS, '--end-of-options', base, ref, '--'], 'diff'));
-    add(gitRun(env, [...DIFF_FLAGS, '--end-of-options', 'HEAD', '--'], 'diff'));
-    add(gitRun(env, ['ls-files', '--others', '--exclude-per-directory=.gitignore', '-z']));
-    add(gitRun(env, ['ls-files', '--others', '-z', '--', ':(glob)**/.gitignore'], 'glob'));
+    add(tracked, gitRun(env, [...DIFF_FLAGS, '--end-of-options', base, ref, '--'], 'diff'));
+    add(tracked, gitRun(env, [...DIFF_FLAGS, '--end-of-options', 'HEAD', '--'], 'diff'));
+    add(untracked, gitRun(env, ['ls-files', '--others', '--exclude-per-directory=.gitignore', '-z']));
+    add(untracked, gitRun(env, ['ls-files', '--others', '-z', '--', ':(glob)**/.gitignore'], 'glob'));
   } catch {
     return null;
   }
-  return [...all];
+  return { tracked: [...tracked], untracked: [...untracked].filter((p) => !tracked.has(p)) };
 }
 
 // A path whose last segment is a .gitignore, with the aliases a Windows file system gives it.
@@ -471,6 +547,10 @@ function isIgnoreFile(p) {
 // ---------------------------------------------------------------- record
 
 const BEGIN_KEYS = ['v', 'at', 'ev', 'pb', 'tier', 'path', 'why', 'rev', 'base', 'skip'];
+const BEGIN_PINS = ['local', 'gov'];
+const HEX64 = /^[0-9a-f]{64}$/;
+// The begin keys of a record: the fixed ones plus any of the optional v1.2 pins it carries.
+const beginKeysOf = (rec) => [...BEGIN_KEYS, ...BEGIN_PINS.filter((k) => Object.hasOwn(rec, k))];
 const RAISE_KEYS = ['v', 'at', 'ev', 'tier', 'cause'];
 const RAN_KEYS = ['v', 'at', 'ev', 'entry'];
 
@@ -509,7 +589,7 @@ function parseRecordText(slug, text) {
     if (!isObject(rec)) throw bad('not an object');
     if (rec.v !== 1) throw bad('unknown v');
     if (rec.ev !== 'begin' && rec.ev !== 'raise' && rec.ev !== 'ran') throw bad('unknown ev');
-    if (!keysAre(rec, rec.ev === 'begin' ? BEGIN_KEYS : rec.ev === 'raise' ? RAISE_KEYS : RAN_KEYS)) throw bad('keys');
+    if (!keysAre(rec, rec.ev === 'begin' ? beginKeysOf(rec) : rec.ev === 'raise' ? RAISE_KEYS : RAN_KEYS)) throw bad('keys');
     if (typeof rec.at !== 'string' || !TIME.test(rec.at)) throw bad('at');
     if (rec.ev === 'ran') {
       if (i === 0) throw bad('first line is not begin');
@@ -528,6 +608,7 @@ function parseRecordText(slug, text) {
       if (!Number.isInteger(rec.rev) || rec.rev < 0 || rec.rev > 999) throw bad('rev');
       if (typeof rec.base !== 'string' || !FULL_SHA.test(rec.base)) throw bad('base');
       if (!skipValid(rec)) throw bad('skip');
+      for (const k of BEGIN_PINS) if (Object.hasOwn(rec, k) && (typeof rec[k] !== 'string' || !HEX64.test(rec[k]))) throw bad(k);
       tier = rec.tier;
       beginRec = rec;
     } else {
@@ -739,6 +820,9 @@ function cmdPreview(args, env, write) {
     const resolved = resolveBaseId(env, flags['--base'], len);
     if (resolved.fail) throw new Refusal(resolved.fail);
     rec = beginRecord(env, slug, flags, sets, resolved.id, 'full');
+    const pins = localState(env, resolved.id);
+    if (pins.local) rec.local = pins.local;
+    if (pins.gov) rec.gov = pins.gov;
     appendRecord(cur, slug, rec);
   } else {
     rec = beginRecord(env, slug, flags, sets, '0'.repeat(40), 'short');
@@ -772,7 +856,7 @@ function contractMajor(env, base, p) {
   }
 }
 
-function checkTo(env, slug, recBase, leadBase, flags) {
+function checkTo(env, slug, recBase, leadBase, flags, pins = {}) {
   const hits = [];
   let paths = 0;
   let warning = null;
@@ -792,7 +876,21 @@ function checkTo(env, slug, recBase, leadBase, flags) {
     base = null;
   }
   const formatOk = base !== null;
-  const core = formatOk ? readCore(env, base) : { unknown: true };
+  // v1.2: the local state now, compared with the pins begin took. Only an unchanged pin is trusted.
+  // A record without pins (v1.1 and older, or a begin whose pin failed) keeps the v1.1 check unchanged.
+  const pinned = typeof pins.gov === 'string' || typeof pins.local === 'string';
+  const now = formatOk && pinned ? localState(env, base) : { tracked: null, local: null, gov: null, project: null };
+  const govSame = now.tracked === false && typeof pins.gov === 'string' && now.gov === pins.gov;
+  const localSame = now.tracked !== null && typeof pins.local === 'string' && now.local === pins.local;
+  let core = { unknown: true };
+  if (formatOk && (!pinned || now.tracked === true)) core = readCore(env, base);
+  else if (govSame && now.project !== null) {
+    try {
+      core = parseCore(decode(now.project));
+    } catch {
+      core = { unknown: true };
+    }
+  }
   const all = [];
   if (core.unknown) hits.push({ source: 'core', reason: 'core unknown', path: null });
   else warning = core.warning;
@@ -804,11 +902,17 @@ function checkTo(env, slug, recBase, leadBase, flags) {
   if (wantDiff) {
     const items = formatOk ? readDiffPaths(env, base, slug) : null;
     if (items === null) hits.push({ source: 'diff', reason: 'diff unknown', path: null });
-    else all.push(...items.map((p) => ({ source: 'diff', p })));
+    else {
+      all.push(...items.tracked.map((p) => ({ source: 'diff', p })));
+      // Untracked .company/ files of a product that does not track .company/ are its local governance state:
+      // checked through the gov pin, never listed. Untracked .gitignore files the local pin proves unchanged are no hit.
+      const local = items.untracked.filter((p) => !(govSame && isCompanyPath(p)));
+      all.push(...local.map((p) => ({ source: 'diff', p, pinned: localSame })));
+    }
   }
   paths = new Set(all.map((x) => x.p)).size;
   for (const x of all) {
-    if (x.source === 'diff' && isIgnoreFile(x.p)) hits.push({ source: 'diff', reason: 'ignore file changed', path: safeEcho(x.p) });
+    if (x.source === 'diff' && isIgnoreFile(x.p) && !x.pinned) hits.push({ source: 'diff', reason: 'ignore file changed', path: safeEcho(x.p) });
   }
   if (!core.unknown) {
     for (const x of all) {
@@ -845,7 +949,7 @@ function cmdSync(args, env) {
   const sets = loadTierSets(env.pluginRoot);
   const view = buildView(slug, cur.records);
   const env2 = { ...env, forcedHigh: sets.forced_high };
-  const check = checkTo(env2, slug, view.base, flags['--base'], flags);
+  const check = checkTo(env2, slug, view.base, flags['--base'], flags, { local: cur.records[0].local, gov: cur.records[0].gov });
   const step = runTier(env, slug, 'low').stepRank;
   const short = view.path === 'short';
   const changed = short && sets.ok && sets.rev !== view.rev;

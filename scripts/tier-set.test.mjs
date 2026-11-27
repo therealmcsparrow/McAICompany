@@ -43,6 +43,13 @@ const FORMAT = git('rev-parse', '--show-object-format');
 const isFormat = (sub) => sub[0] === 'rev-parse' && sub[1] === '--show-object-format';
 const isDisambiguate = (sub) => sub[0] === 'rev-parse' && typeof sub[1] === 'string' && sub[1].startsWith('--disambiguate=');
 const ANCESTOR = (id) => git('merge-base', '--is-ancestor', '--end-of-options', id, 'HEAD');
+// begin's pin calls (contract v1.2): the project.md probe at the base, ls-tree when the probe fails, then the untracked .gitignore list
+const IGNORES = git('ls-files', '--others', '-z', '--', ':(glob)**/.gitignore');
+const PINS = (id, absent = false) => [
+  git('cat-file', '-e', '--end-of-options', `${id}:.company/project.md`),
+  ...(absent ? [[...DIFF_GLOBAL, 'ls-tree', '--name-only', '-z', '--end-of-options', id, '--', '.company/project.md']] : []),
+  IGNORES
+];
 const PLAYBOOKS = ['feature', 'fix'];
 const BEGIN_LOW = ['--playbook', 'feature', '--triage', 'low', '--short', 'on', '--ceo', 'short'];
 const BEGIN_FULL = ['--playbook', 'feature', '--triage', 'low', '--short', 'off'];
@@ -685,6 +692,15 @@ describe('record allow-list and limits', () => {
     assert.equal(read([{ ...begin, base: 'f'.repeat(64) }]).code, 0);
     assert.equal(read([{ ...begin, path: 'full', why: 'ceo', skip: [] }]).code, 0);
   });
+  test('v1.2 pins: optional 64-hex local and gov on begin only', () => {
+    const h = 'a'.repeat(64);
+    assert.equal(read([{ ...begin, local: h, gov: h }]).code, 0);
+    assert.equal(read([{ ...begin, gov: h }]).code, 0);
+    assert.equal(reasonOf([{ ...begin, gov: 'A'.repeat(64) }]), 'gov');
+    assert.equal(reasonOf([{ ...begin, local: h.slice(1) }]), 'local');
+    assert.equal(reasonOf([{ ...begin, local: 7 }]), 'local');
+    assert.equal(reasonOf([begin, { ...raise, gov: h }]), 'keys');
+  });
   test('every refused shape', () => {
     assert.equal(reasonOf([{ ...begin, extra: 1 }]), 'keys');
     assert.equal(reasonOf([{ ...begin, base: undefined }]), 'keys');
@@ -815,7 +831,7 @@ describe('fix round: hostile and contract cases', () => {
     const f = fixture();
     f.begin();
     assert.equal(f.lines()[0].base, RESOLVED);
-    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT, git('rev-parse', `--disambiguate=${SHA}`), git('cat-file', '-t', '--end-of-options', RESOLVED), ANCESTOR(RESOLVED)]);
+    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT, git('rev-parse', `--disambiguate=${SHA}`), git('cat-file', '-t', '--end-of-options', RESOLVED), ANCESTOR(RESOLVED), ...PINS(RESOLVED)]);
   });
   test('a full-length base goes through the same lookup; a base longer than the format is refused before any lookup', () => {
     const base = 'b'.repeat(40);
@@ -823,7 +839,7 @@ describe('fix round: hostile and contract cases', () => {
     f.setGit((sub) => (isDisambiguate(sub) ? Buffer.from(`${base}\n`) : undefined));
     assert.equal(f.run('begin', f.slug, ...BEGIN_LOW, '--base', base).code, 0);
     assert.equal(f.lines()[0].base, base);
-    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT, git('rev-parse', `--disambiguate=${base}`), git('cat-file', '-t', '--end-of-options', base), ANCESTOR(base)]);
+    assert.deepEqual(f.calls.map((c) => c.args), [FORMAT, git('rev-parse', `--disambiguate=${base}`), git('cat-file', '-t', '--end-of-options', base), ANCESTOR(base), ...PINS(base)]);
     const g = fixture();
     assert.equal(g.run('begin', g.slug, ...BEGIN_LOW, '--base', 'c'.repeat(64)).code, 3);
     assert.deepEqual(g.calls.map((c) => c.args), [FORMAT]);
@@ -1199,7 +1215,7 @@ describe('real git, every call form', () => {
     assert.equal(b.code, 0, b.lines.join('\n'));
     const rec = JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]);
     assert.equal(rec.base, first);
-    assert.deepEqual(r.calls, [FORMAT, git('rev-parse', `--disambiguate=${short}`), git('cat-file', '-t', '--end-of-options', first), ANCESTOR(first)]);
+    assert.deepEqual(r.calls, [FORMAT, git('rev-parse', `--disambiguate=${short}`), git('cat-file', '-t', '--end-of-options', first), ANCESTOR(first), ...PINS(first)]);
 
     r.write('src/auth/x.ts', 'export {}');
     r.commit('auth');
@@ -1227,6 +1243,81 @@ describe('real git, every call form', () => {
     ]);
   });
 
+  const PIN_FLAGS = ['--playbook', 'feature', '--triage', 'low', '--short', 'on', '--ceo', 'short'];
+  const PIN_PLAN = '# Plan\n## Tasks\n### T1 a\n- role: backend-engineer\n- files: docs/a.md\n- depends-on: none\n- parallel: yes\n';
+  const pinSync = (r, base) => {
+    fs.writeFileSync(path.join(r.runDir, '02-plan.md'), PIN_PLAN);
+    const s = r.run('sync', 'demo', '--plan', '02-plan.md', '--diff', '--base', base);
+    assert.equal(s.code, 0, s.lines.join('\n'));
+    return s.lines;
+  };
+
+  test('v1.2: an untracked .gitignore there at begin is no hit; a change to it or a new one is', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('.company/project.md', '## Core\n- skills/pipeline: run setup\n');
+    r.write('a.txt', 'one');
+    const base = r.commit('first');
+    r.write('sub/.gitignore', '*\n');
+    assert.equal(r.run('begin', 'demo', ...PIN_FLAGS, '--base', base).code, 0);
+    const rec = JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]);
+    assert.match(rec.local, /^[0-9a-f]{64}$/);
+    assert.equal(rec.gov, undefined, 'project.md is tracked at the base: no gov pin');
+    assert.ok(!pinSync(r, base).some((l) => l.includes('ignore file changed')));
+    r.write('sub/.gitignore', '*.log\n');
+    assert.ok(pinSync(r, base).includes('check: high: ignore file changed sub/.gitignore'));
+    r.write('sub/.gitignore', '*\n');
+    r.write('other/.gitignore', 'x\n');
+    const lines = pinSync(r, base);
+    assert.ok(lines.includes('check: high: ignore file changed other/.gitignore'), lines.join('\n'));
+  });
+
+  test('v1.2: untracked .company reads Core from the pinned working copy; a later edit is core unknown', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('a.txt', 'one');
+    const base = r.commit('first');
+    r.write('.company/project.md', '## Core\n- skills/pipeline: run setup\n\n## Modules\n');
+    r.write('.company/standards.md', '# Standards\n');
+    assert.equal(r.run('begin', 'demo', ...PIN_FLAGS, '--base', base).code, 0);
+    const rec = JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]);
+    assert.match(rec.gov, /^[0-9a-f]{64}$/);
+    r.write('skills/pipeline/new.md', 'x');
+    let lines = pinSync(r, base);
+    assert.ok(lines.includes('check: high: core skills/pipeline/new.md'), lines.join('\n'));
+    assert.ok(!lines.some((l) => l.includes('core unknown') || l.includes('.company/')), lines.join('\n'));
+    fs.rmSync(path.join(r.dir, 'skills'), { recursive: true });
+    r.write('docs/a.md', 'x');
+    lines = pinSync(r, base);
+    assert.ok(!lines.some((l) => l.startsWith('check: high')), lines.join('\n'));
+    r.write('.company/standards.md', '# Standards\nchanged\n');
+    assert.ok(pinSync(r, base).includes('check: high: core unknown'));
+    r.write('.company/standards.md', '# Standards\n');
+    assert.ok(!pinSync(r, base).includes('check: high: core unknown'));
+    r.write('.company/project.md', '## Core\n');
+    assert.ok(pinSync(r, base).includes('check: high: core unknown'));
+    r.write('.company/project.md', '## Core\n- skills/pipeline: run setup\n\n## Modules\n');
+    r.write('.company/settings.json', '{}');
+    assert.ok(pinSync(r, base).includes('check: high: core unknown'), 'a new governance file is a change');
+  });
+
+  test('v1.2: a record without pins keeps the v1.1 checks', (t) => {
+    if (!gitOk) return t.skip('git is not available');
+    const r = repo(t);
+    r.write('a.txt', 'one');
+    const base = r.commit('first');
+    r.write('.company/project.md', '## Core\n- skills/pipeline: run setup\n');
+    r.write('sub/.gitignore', '*\n');
+    assert.equal(r.run('begin', 'demo', ...PIN_FLAGS, '--base', base).code, 0);
+    const rec = JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]);
+    delete rec.local;
+    delete rec.gov;
+    fs.writeFileSync(r.record, JSON.stringify(rec) + '\n');
+    const lines = pinSync(r, base);
+    assert.ok(lines.includes('check: high: core unknown'), lines.join('\n'));
+    assert.ok(lines.includes('check: high: ignore file changed sub/.gitignore'), lines.join('\n'));
+  });
+
   test('a full 40 hex id is checked as a commit; a tree id and unknown ids are refused', (t) => {
     if (!gitOk) return t.skip('git is not available');
     const r = repo(t);
@@ -1235,7 +1326,7 @@ describe('real git, every call form', () => {
     r.calls.length = 0;
     const ok = r.run('begin', 'demo', '--playbook', 'fix', '--triage', 'low', '--short', 'on', '--base', first, '--ceo', 'short');
     assert.equal(ok.code, 0, ok.lines.join('\n'));
-    assert.deepEqual(r.calls, [FORMAT, git('rev-parse', `--disambiguate=${first}`), git('cat-file', '-t', '--end-of-options', first), ANCESTOR(first)]);
+    assert.deepEqual(r.calls, [FORMAT, git('rev-parse', `--disambiguate=${first}`), git('cat-file', '-t', '--end-of-options', first), ANCESTOR(first), ...PINS(first, true)]);
     assert.equal(JSON.parse(fs.readFileSync(r.record, 'utf8').split('\n')[0]).base, first);
     fs.rmSync(r.record);
     const tree = r.g('rev-parse', 'HEAD^{tree}');
