@@ -31,6 +31,10 @@ const verdict = async (tmp, tool, command, cwd = tmp) => {
   return out.every((v) => v === out[0]) ? out[0] : `split:${out.join(',')}`;
 };
 const bash = (tmp, c, cwd) => verdict(tmp, 'Bash', c, cwd);
+// Wall time of fn in ms. The speed tests compare against a plain command of the same shape run in the same moment,
+// so a loaded machine slows both alike; runaway backtracking is orders of magnitude slower and still fails.
+const timed = async (fn) => { const t = process.hrtime.bigint(); await fn(); return Number(process.hrtime.bigint() - t) / 1e6; };
+const fastEnough = (ms, baseMs, floorMs) => ms < Math.max(floorMs, 20 * baseMs);
 const ps = (tmp, c, cwd) => verdict(tmp, 'PowerShell', c, cwd);
 
 const junk = (n, sep = '/') => Array.from({ length: n }, (_, i) => `.${sep}j${i}.txt`).join(' ');
@@ -139,17 +143,25 @@ test('a relative write after cd into the run folder denies for a record and allo
 
 test('an over-wide brace expansion denies and stays fast', () => withProject(async (tmp) => {
   const braces = '{a,b}'.repeat(12);
-  const t = process.hrtime.bigint();
-  assert.equal(await bash(tmp, `echo x >> ${braces}`), 'deny');
-  assert.ok(Number(process.hrtime.bigint() - t) / 1e6 < 1000);
+  const base = await timed(() => bash(tmp, 'echo x >> ab.txt'));
+  let v;
+  const ms = await timed(async () => { v = await bash(tmp, `echo x >> ${braces}`); });
+  assert.equal(v, 'deny');
+  assert.ok(fastEnough(ms, base, 1000), `${ms} ms vs plain ${base} ms`);
 }));
 
 test('pathological glob text stays fast', () => withProject(async (tmp) => {
-  const t = process.hrtime.bigint();
-  await bash(tmp, `echo x >> ${'*a'.repeat(120)}b/forms.jsonl`);
-  await bash(tmp, `echo x >> ${'*a'.repeat(2000)}`);
-  await bash(tmp, Array.from({ length: 300 }, (_, i) => `echo x >> s${i}/*.t?t`).join('\n'));
-  assert.ok(Number(process.hrtime.bigint() - t) / 1e6 < 3000);
+  const base = await timed(async () => {
+    await bash(tmp, 'echo x >> ab/forms.txt');
+    await bash(tmp, 'echo x >> ab');
+    await bash(tmp, Array.from({ length: 300 }, (_, i) => `echo x >> s${i}/a.txt`).join('\n'));
+  });
+  const ms = await timed(async () => {
+    await bash(tmp, `echo x >> ${'*a'.repeat(120)}b/forms.jsonl`);
+    await bash(tmp, `echo x >> ${'*a'.repeat(2000)}`);
+    await bash(tmp, Array.from({ length: 300 }, (_, i) => `echo x >> s${i}/*.t?t`).join('\n'));
+  });
+  assert.ok(fastEnough(ms, base, 3000), `${ms} ms vs plain ${base} ms`);
 }));
 
 test('a long token list with cwd inside the plugin tree allows a relative write', () => withProject(async () => {

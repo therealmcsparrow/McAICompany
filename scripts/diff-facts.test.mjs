@@ -63,9 +63,9 @@ function sandbox() {
       git(['commit', '-q', '-m', msg]);
       return git(['rev-parse', 'HEAD']).trim();
     },
-    cli(args, extraEnv = {}) {
+    cli(args, extraEnv = {}, timeout = 30000) {
       const r = spawnSync(process.execPath, [SCRIPT, ...args], {
-        cwd: repo, env: { ...env, ...extraEnv }, encoding: 'utf8', timeout: 30000,
+        cwd: repo, env: { ...env, ...extraEnv }, encoding: 'utf8', timeout,
       });
       return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
     },
@@ -655,7 +655,8 @@ test('show: facts of a commit range, written nowhere', async t => {
     execFileSync('git', ['update-index', '--index-info'], { cwd: s.repo, env: s.env, input: lines });
     const tree = s.git(['write-tree']).trim();
     const head = s.git(['commit-tree', tree, '-p', base, '-m', 'many']).trim();
-    const r = s.cli(['show', '--base', base, '--head', head]);
+    // 5100 paths: a busy machine (full local suite) can take well over 30 s; the bound under test is the output size
+    const r = s.cli(['show', '--base', base, '--head', head], {}, 180000);
     assert.equal(r.status, 0, r.stderr);
     const facts = parse(r);
     assert.equal(facts.truncated, true);
