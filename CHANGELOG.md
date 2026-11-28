@@ -4,6 +4,20 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-28
+
+Rollback: node scripts/stable.mjs 0.47.2
+
+### Changed
+- One Ship Gate per change: approving a feature or fix covers push, PR and merge once all CI is green (Windows included). Tag and release are never bundled: a release is always its own CEO approval. PR #117.
+- Nits no longer ask the CEO: one bounded nit Fix Step after the last clean review, leftovers go to Debt. Past the Fix-round limit a test-quality-only blocker gets one automatic extra round; only correctness or security blockers ask. PR #117.
+- Tier check (`tier-sets` v2.1): begin pins the untracked `.company/` governance files and pre-existing untracked `.gitignore` files, so normal runs no longer go high on their first check; any change after begin still forces high. PR #117.
+
+### Fixed
+- Ship Gate is never approved by wording in the request: only the CEO's own approval counts. PR #114.
+- Tests: retry temp dir cleanup (RM_OPTS in harness and exit sweep) to stop Windows flakes, plus review follow-ups R-1 and R-2. PR #115.
+- Tests: load-robust timing in the diff-facts big-range and self-protect speed checks. PR #118.
+
 ## [0.47.2] - 2026-11-27
 
 Rollback: node scripts/stable.mjs 0.47.1
