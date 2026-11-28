@@ -4,6 +4,10 @@ All notable changes to the aico plugin. Versions follow the plugin's own release
 
 ## [Unreleased]
 
+## [0.48.0] - 2026-11-28
+
+Rollback: node scripts/stable.mjs 0.47.2
+
 ### Changed
 - One Ship Gate per change: approving a feature or fix covers push, PR and merge once all CI is green (Windows included). Tag and release are never bundled: a release is always its own CEO approval. PR #117.
 - Nits no longer ask the CEO: one bounded nit Fix Step after the last clean review, leftovers go to Debt. Past the Fix-round limit a test-quality-only blocker gets one automatic extra round; only correctness or security blockers ask. PR #117.
